@@ -22,10 +22,12 @@ class GenericSpider(scrapy.Spider):
         self.allowed_domains = allowed_domains or [domain]
         self.pages_crawled = 0
         self.crawl_session_id = crawl_session_id
+        self.logger.warning("SPIDER INIT: crawl_session_id=%s max_pages=%s domain=%s", crawl_session_id, max_pages, domain)
         if crawl_session_id:
             set_progress(crawl_session_id, 0, max_pages)
 
     def parse(self, response: Response, **kwargs):
+        self.logger.warning("SPIDER PARSE: url=%s crawl_session_id=%s pages_crawled=%s", response.url, self.crawl_session_id, self.pages_crawled)
         if self.pages_crawled >= self.max_pages:
             return
 

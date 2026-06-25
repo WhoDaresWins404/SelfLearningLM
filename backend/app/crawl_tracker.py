@@ -13,7 +13,7 @@ def init_session(session_id: int, total_pages: int):
         "pages_crawled": 0,
         "total_pages": total_pages,
     }
-    logger.info("Tracker initialized for session %s", session_id)
+    logger.warning("Tracker initialized for session %s", session_id)
 
 
 def set_current_url(session_id: int, url: str):
