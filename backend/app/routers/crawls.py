@@ -3,7 +3,7 @@ import threading
 
 from fastapi import APIRouter, HTTPException
 
-from backend.app.database import get_main_connection
+from backend.app.database import get_main_connection, get_lake_connection
 from backend.app.schemas.crawl import CrawlConfig
 
 router = APIRouter(prefix="/api/crawls", tags=["crawls"])
@@ -68,7 +68,7 @@ def start_crawl(config: CrawlConfig):
     conn.commit()
     session_id = cur.lastrowid
 
-    lake = get_main_connection()
+    lake = get_lake_connection()
     for url in config.start_urls:
         lake.execute(
             "INSERT INTO url_frontier (url, domain, depth, status, crawl_session_id) VALUES (?, ?, 0, 'pending', ?)",
