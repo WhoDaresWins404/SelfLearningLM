@@ -29,20 +29,36 @@
 
     <div class="card sessions-section">
       <h3>Recent Crawl Sessions</h3>
+      <div class="table-header">
+        <span></span>
+        <Button icon="pi pi-refresh" text rounded size="small" @click="refresh" />
+      </div>
       <DataTable :value="sessions" stripedRows>
         <Column field="id" header="ID" sortable></Column>
         <Column field="domain" header="Domain" sortable></Column>
         <Column field="status" header="Status" sortable></Column>
         <Column field="started_at" header="Started"></Column>
         <Column field="finished_at" header="Finished"></Column>
+        <Column header="">
+          <template #body="slotProps">
+            <Button icon="pi pi-trash" text rounded severity="danger" size="small" @click="confirmDelete(slotProps.data)" />
+          </template>
+        </Column>
       </DataTable>
+      <Dialog v-model:visible="deleteDialog" header="Delete Session" :modal="true">
+        <p>Delete crawl session #{{ toDelete?.id }} for <strong>{{ toDelete?.domain }}</strong>?</p>
+        <template #footer>
+          <Button label="Cancel" text @click="deleteDialog = false" />
+          <Button label="Delete" severity="danger" @click="doDelete" />
+        </template>
+      </Dialog>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { listCrawls, startCrawl } from '../api/crawls'
+import { listCrawls, startCrawl, deleteCrawl } from '../api/crawls'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import InputNumber from 'primevue/inputnumber'
@@ -50,15 +66,31 @@ import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
+import Dialog from 'primevue/dialog'
 
 const starting = ref(false)
 const sessions = ref([])
 const form = ref({ urls: '', max_pages: 100, download_delay: 2.0, use_proxies: false })
+const deleteDialog = ref(false)
+const toDelete = ref(null)
 
-onMounted(async () => {
+onMounted(refresh)
+
+async function refresh() {
   const res = await listCrawls()
   sessions.value = res.data
-})
+}
+
+function confirmDelete(session) {
+  toDelete.value = session
+  deleteDialog.value = true
+}
+
+async function doDelete() {
+  await deleteCrawl(toDelete.value.id)
+  deleteDialog.value = false
+  await refresh()
+}
 
 async function start() {
   starting.value = true
@@ -94,4 +126,5 @@ async function start() {
 .checkbox-field { display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.3rem; }
 .checkbox-field label { margin-bottom: 0; }
 .hint { font-weight: normal; font-size: 0.8rem; color: #94a3b8; }
+.table-header { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }
 </style>

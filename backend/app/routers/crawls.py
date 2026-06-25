@@ -58,6 +58,17 @@ def _run_crawl(session_id: int, domain: str, start_urls: list[str], max_pages: i
     conn.close()
 
 
+@router.delete("/{session_id}")
+def delete_crawl(session_id: int):
+    conn = get_main_connection()
+    cur = conn.execute("DELETE FROM crawl_sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    conn.close()
+    if not cur.rowcount:
+        raise HTTPException(404, "Crawl session not found")
+    return {"ok": True}
+
+
 @router.post("", status_code=201)
 def start_crawl(config: CrawlConfig):
     conn = get_main_connection()

@@ -15,3 +15,7 @@ export function startCrawl(config) {
 export function getDashboard() {
   return api.get('/api/dashboard')
 }
+
+export function deleteCrawl(id) {
+  return api.delete(`/api/crawls/${id}`)
+}
