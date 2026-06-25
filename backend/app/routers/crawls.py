@@ -3,7 +3,7 @@ import threading
 
 from fastapi import APIRouter, HTTPException
 
-from backend.app.crawl_tracker import get_status, remove_session
+from backend.app.crawl_tracker import get_status, init_session, remove_session
 from backend.app.database import get_main_connection, get_lake_connection
 from backend.app.schemas.crawl import CrawlConfig
 
@@ -102,6 +102,8 @@ def start_crawl(config: CrawlConfig):
     lake.commit()
     lake.close()
     conn.close()
+
+    init_session(session_id, config.max_pages)
 
     thread = threading.Thread(
         target=_run_crawl,
