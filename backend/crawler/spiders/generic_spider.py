@@ -22,9 +22,15 @@ class GenericSpider(scrapy.Spider):
         self.allowed_domains = allowed_domains or [domain]
         self.pages_crawled = 0
         self.crawl_session_id = crawl_session_id
-        self.logger.warning("SPIDER INIT: crawl_session_id=%s max_pages=%s domain=%s", crawl_session_id, max_pages, domain)
+        self.logger.warning("SPIDER INIT: crawl_session_id=%s max_pages=%s domain=%s start_urls=%s", crawl_session_id, max_pages, domain, self.start_urls)
         if crawl_session_id:
             set_progress(crawl_session_id, 0, max_pages)
+
+    def start_requests(self):
+        self.logger.warning("START_REQUESTS: start_urls=%s", self.start_urls)
+        for url in self.start_urls:
+            self.logger.warning("START_REQUESTS yielding: %s", url)
+            yield scrapy.Request(url, callback=self.parse, dont_filter=True)
 
     def parse(self, response: Response, **kwargs):
         self.logger.warning("SPIDER PARSE: url=%s crawl_session_id=%s pages_crawled=%s", response.url, self.crawl_session_id, self.pages_crawled)
