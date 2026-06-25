@@ -1,0 +1,5 @@
+# Proxy list - one proxy per line
+# Format: scheme://user:pass@host:port  or  scheme://host:port
+# Example:
+# http://user:pass@proxy.example.com:8080
+# socks5://127.0.0.1:1080
