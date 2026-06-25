@@ -18,6 +18,7 @@ def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_pro
         "DOWNLOAD_DELAY": settings.default_download_delay,
         "COOKIES_ENABLED": False,
         "TELNETCONSOLE_ENABLED": False,
+        "TWISTED_REACTOR": "twisted.internet.epollreactor.EPollReactor",
         "LOG_LEVEL": "INFO",
         "DOWNLOADER_MIDDLEWARES": {
             "backend.crawler.middleware.EvasionMiddleware": 100,
