@@ -20,12 +20,11 @@ app.include_router(records.router)
 
 @app.on_event("startup")
 def startup():
+    for d in [settings.unstructured_dir, settings.structured_dir, settings.dead_letter_dir]:
+        d.mkdir(parents=True, exist_ok=True)
     init_main_db()
     init_lake_db()
     seed_if_empty()
-
-    for d in [settings.unstructured_dir, settings.structured_dir, settings.dead_letter_dir]:
-        d.mkdir(parents=True, exist_ok=True)
 
     static_dir = settings.frontend_dist
     if static_dir.exists():
