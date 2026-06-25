@@ -3,6 +3,7 @@ import threading
 
 from fastapi import APIRouter, HTTPException
 
+from backend.app.crawl_tracker import get_status, remove_session
 from backend.app.database import get_main_connection, get_lake_connection
 from backend.app.schemas.crawl import CrawlConfig
 
@@ -27,6 +28,17 @@ def get_crawl(session_id: int):
     return dict(row)
 
 
+@router.get("/{session_id}/live")
+def crawl_live_status(session_id: int):
+    status = get_status(session_id)
+    conn = get_main_connection()
+    row = conn.execute("SELECT status FROM crawl_sessions WHERE id = ?", (session_id,)).fetchone()
+    conn.close()
+    if row:
+        status["db_status"] = row["status"]
+    return status
+
+
 def _run_crawl(session_id: int, domain: str, start_urls: list[str], max_pages: int, use_proxies: bool):
     from backend.crawler.engine import run_spider
     conn = get_main_connection()
@@ -38,7 +50,7 @@ def _run_crawl(session_id: int, domain: str, start_urls: list[str], max_pages: i
     conn.close()
 
     try:
-        run_spider(domain=domain, start_urls=start_urls, max_pages=max_pages, use_proxies=use_proxies)
+        run_spider(domain=domain, start_urls=start_urls, max_pages=max_pages, use_proxies=use_proxies, crawl_session_id=session_id)
     except Exception as e:
         conn = get_main_connection()
         conn.execute(
@@ -47,6 +59,7 @@ def _run_crawl(session_id: int, domain: str, start_urls: list[str], max_pages: i
         )
         conn.commit()
         conn.close()
+        remove_session(session_id)
         return
 
     conn = get_main_connection()
@@ -56,6 +69,7 @@ def _run_crawl(session_id: int, domain: str, start_urls: list[str], max_pages: i
     )
     conn.commit()
     conn.close()
+    remove_session(session_id)
 
 
 @router.delete("/{session_id}")

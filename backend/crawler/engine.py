@@ -5,7 +5,7 @@ from backend.app.config import settings
 from backend.crawler.spiders.generic_spider import GenericSpider
 
 
-def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_proxies: bool = False):
+def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_proxies: bool = False, crawl_session_id: int = 0):
     spider_settings = {
         "BOT_NAME": "selflearninglm",
         "ROBOTSTXT_OBEY": True,
@@ -23,6 +23,6 @@ def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_pro
     }
 
     runner = CrawlerRunner(settings=spider_settings)
-    d = runner.crawl(GenericSpider, domain=domain, start_urls=start_urls, max_pages=max_pages)
+    d = runner.crawl(GenericSpider, domain=domain, start_urls=start_urls, max_pages=max_pages, crawl_session_id=crawl_session_id)
     d.addBoth(lambda _: reactor.stop())
     reactor.run(installSignalHandlers=False)

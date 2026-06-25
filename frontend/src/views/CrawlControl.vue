@@ -2,6 +2,24 @@
   <div class="crawl-page">
     <h1 class="page-title">Crawl Control</h1>
 
+    <div v-if="liveSessionId" class="card live-card">
+      <h3><i class="pi pi-sync pi-spin"></i> Crawl in Progress — #{{ liveSessionId }}</h3>
+      <div class="live-stats">
+        <div class="live-stat">
+          <span class="label">Status</span>
+          <Tag :value="liveStatus.db_status" :severity="liveStatus.alive ? 'info' : 'warn'" />
+        </div>
+        <div class="live-stat">
+          <span class="label">Pages</span>
+          <span class="value">{{ liveStatus.pages_crawled || 0 }} / {{ liveStatus.total_pages || '?' }}</span>
+        </div>
+        <div class="live-stat">
+          <span class="label">Current URL</span>
+          <span class="value url">{{ liveStatus.current_url || 'waiting...' }}</span>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <h3>Start New Crawl</h3>
       <div class="crawl-form">
@@ -57,8 +75,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { listCrawls, startCrawl, deleteCrawl } from '../api/crawls'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { listCrawls, startCrawl, deleteCrawl, getCrawlLiveStatus } from '../api/crawls'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import InputNumber from 'primevue/inputnumber'
@@ -67,18 +85,44 @@ import Checkbox from 'primevue/checkbox'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Dialog from 'primevue/dialog'
+import Tag from 'primevue/tag'
 
 const starting = ref(false)
 const sessions = ref([])
 const form = ref({ urls: '', max_pages: 100, download_delay: 2.0, use_proxies: false })
 const deleteDialog = ref(false)
 const toDelete = ref(null)
+const liveSessionId = ref(null)
+const liveStatus = ref({ current_url: '', alive: false, pages_crawled: 0, total_pages: 0 })
+let liveInterval = null
 
 onMounted(refresh)
+
+onUnmounted(() => {
+  if (liveInterval) clearInterval(liveInterval)
+})
 
 async function refresh() {
   const res = await listCrawls()
   sessions.value = res.data
+}
+
+async function pollLive() {
+  if (!liveSessionId.value) return
+  try {
+    const res = await getCrawlLiveStatus(liveSessionId.value)
+    liveStatus.value = res.data
+    if (res.data.db_status !== 'running') {
+      clearInterval(liveInterval)
+      liveInterval = null
+      liveSessionId.value = null
+      await refresh()
+    }
+  } catch {
+    clearInterval(liveInterval)
+    liveInterval = null
+    liveSessionId.value = null
+  }
 }
 
 function confirmDelete(session) {
@@ -98,16 +142,18 @@ async function start() {
     const urls = form.value.urls.split('\n').filter(Boolean)
     if (!urls.length) return
     const domain = new URL(urls[0]).hostname
-    await startCrawl({
+    const res = await startCrawl({
       domain,
       start_urls: urls,
       max_pages: form.value.max_pages,
       download_delay: form.value.download_delay,
       use_proxies: form.value.use_proxies,
     })
-    const res = await listCrawls()
-    sessions.value = res.data
+    liveSessionId.value = res.data.id
+    liveStatus.value = { current_url: '', alive: true, pages_crawled: 0, total_pages: form.value.max_pages, db_status: 'running' }
+    liveInterval = setInterval(pollLive, 2000)
     form.value = { urls: '', max_pages: 100, download_delay: 2.0, use_proxies: false }
+    await refresh()
   } finally {
     starting.value = false
   }
@@ -127,4 +173,12 @@ async function start() {
 .checkbox-field label { margin-bottom: 0; }
 .hint { font-weight: normal; font-size: 0.8rem; color: #94a3b8; }
 .table-header { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }
+.live-card { background: #eef2ff; border: 1px solid #818cf8; }
+.live-card h3 { display: flex; align-items: center; gap: 0.5rem; color: #4338ca; }
+.live-card h3 i { font-size: 1rem; }
+.live-stats { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; }
+.live-stat { display: flex; gap: 0.75rem; align-items: baseline; }
+.live-stat .label { font-weight: 600; font-size: 0.85rem; color: #475569; min-width: 80px; }
+.live-stat .value { font-size: 0.9rem; }
+.live-stat .url { font-family: monospace; font-size: 0.8rem; word-break: break-all; color: #1e40af; }
 </style>

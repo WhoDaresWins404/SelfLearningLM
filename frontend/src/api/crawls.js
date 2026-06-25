@@ -19,3 +19,7 @@ export function getDashboard() {
 export function deleteCrawl(id) {
   return api.delete(`/api/crawls/${id}`)
 }
+
+export function getCrawlLiveStatus(id) {
+  return api.get(`/api/crawls/${id}/live`)
+}

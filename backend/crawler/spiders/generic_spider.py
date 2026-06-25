@@ -5,6 +5,7 @@ from urllib.parse import urljoin, urlparse
 import scrapy
 from scrapy.http import Response
 
+from backend.app.crawl_tracker import set_current_url, set_progress
 from backend.crawler.evasion.honeypot_detector import detect_honeypot_links, detect_honeypot_fields
 from backend.storage.lake import store_blob, blob_exists_by_url, blob_exists_by_content
 
@@ -13,17 +14,23 @@ class GenericSpider(scrapy.Spider):
     name = "generic"
 
     def __init__(self, domain: str, start_urls: list[str], max_pages: int = 100,
-                 allowed_domains: Optional[list[str]] = None, **kwargs):
+                 allowed_domains: Optional[list[str]] = None, crawl_session_id: int = 0, **kwargs):
         super().__init__(**kwargs)
         self.domain = domain
         self.start_urls = start_urls or [f"https://{domain}"]
         self.max_pages = max_pages
         self.allowed_domains = allowed_domains or [domain]
         self.pages_crawled = 0
+        self.crawl_session_id = crawl_session_id
+        if crawl_session_id:
+            set_progress(crawl_session_id, 0, max_pages)
 
     def parse(self, response: Response, **kwargs):
         if self.pages_crawled >= self.max_pages:
             return
+
+        if self.crawl_session_id:
+            set_current_url(self.crawl_session_id, response.url)
 
         body = response.text
 
@@ -46,6 +53,8 @@ class GenericSpider(scrapy.Spider):
             headers=dict(response.headers),
         )
         self.pages_crawled += 1
+        if self.crawl_session_id:
+            set_progress(self.crawl_session_id, self.pages_crawled, self.max_pages)
 
         for href in response.css("a::attr(href)").getall():
             url = urljoin(response.url, href)
