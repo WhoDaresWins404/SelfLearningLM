@@ -1,16 +1,25 @@
+import asyncio
 import logging
 
-from twisted.internet import reactor
-from twisted.python.failure import Failure
-from scrapy.crawler import CrawlerRunner
-
 from backend.app.config import settings
-from backend.crawler.spiders.generic_spider import GenericSpider
 
 logger = logging.getLogger("crawl_engine")
 
+# Install asyncio reactor BEFORE importing Scrapy (which would trigger epoll reactor)
+_LOOP = asyncio.new_event_loop()
+asyncio.set_event_loop(_LOOP)
+from twisted.internet import asyncioreactor  # noqa: E402
+asyncioreactor.install(eventloop=_LOOP)
+
+from twisted.internet import reactor  # noqa: E402 — returns the asyncio reactor we just installed
+from twisted.python.failure import Failure  # noqa: E402
+from scrapy.crawler import CrawlerRunner  # noqa: E402
+
+from backend.crawler.spiders.generic_spider import GenericSpider  # noqa: E402
+
 
 def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_proxies: bool = False, crawl_session_id: int = 0):
+
     spider_settings = {
         "BOT_NAME": "selflearninglm",
         "ROBOTSTXT_OBEY": True,
@@ -18,7 +27,6 @@ def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_pro
         "DOWNLOAD_DELAY": settings.default_download_delay,
         "COOKIES_ENABLED": False,
         "TELNETCONSOLE_ENABLED": False,
-        "TWISTED_REACTOR": "twisted.internet.epollreactor.EPollReactor",
         "LOG_LEVEL": "INFO",
         "DOWNLOADER_MIDDLEWARES": {
             "backend.crawler.middleware.EvasionMiddleware": 100,
@@ -29,9 +37,7 @@ def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_pro
     }
 
     runner = CrawlerRunner(settings=spider_settings)
-    logger.warning("BEFORE runner.crawl()")
     d = runner.crawl(GenericSpider, domain=domain, start_urls=start_urls, max_pages=max_pages, crawl_session_id=crawl_session_id)
-    logger.warning("AFTER runner.crawl() (d type=%s)", type(d).__name__)
 
     def _on_done(result):
         if isinstance(result, Failure):
@@ -41,6 +47,4 @@ def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_pro
         reactor.stop()
 
     d.addBoth(_on_done)
-    logger.warning("BEFORE reactor.run()")
     reactor.run(installSignalHandlers=False)
-    logger.warning("Reactor stopped.")
