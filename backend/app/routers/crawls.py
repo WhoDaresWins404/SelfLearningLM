@@ -1,7 +1,10 @@
+import json
+import threading
+
 from fastapi import APIRouter, HTTPException
 
 from backend.app.database import get_main_connection
-from backend.app.schemas.crawl import CrawlConfig, CrawlSessionResponse
+from backend.app.schemas.crawl import CrawlConfig
 
 router = APIRouter(prefix="/api/crawls", tags=["crawls"])
 
@@ -24,9 +27,39 @@ def get_crawl(session_id: int):
     return dict(row)
 
 
+def _run_crawl(session_id: int, domain: str, start_urls: list[str], max_pages: int, use_proxies: bool):
+    from backend.crawler.engine import run_spider
+    conn = get_main_connection()
+    conn.execute(
+        "UPDATE crawl_sessions SET started_at = datetime('now') WHERE id = ?",
+        (session_id,),
+    )
+    conn.commit()
+    conn.close()
+
+    try:
+        run_spider(domain=domain, start_urls=start_urls, max_pages=max_pages, use_proxies=use_proxies)
+    except Exception as e:
+        conn = get_main_connection()
+        conn.execute(
+            "UPDATE crawl_sessions SET status = 'failed', stats = ?, finished_at = datetime('now') WHERE id = ?",
+            (json.dumps({"error": str(e)}), session_id),
+        )
+        conn.commit()
+        conn.close()
+        return
+
+    conn = get_main_connection()
+    conn.execute(
+        "UPDATE crawl_sessions SET status = 'done', finished_at = datetime('now') WHERE id = ?",
+        (session_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
 @router.post("", status_code=201)
 def start_crawl(config: CrawlConfig):
-    import json
     conn = get_main_connection()
     cur = conn.execute(
         "INSERT INTO crawl_sessions (domain, status, config) VALUES (?, 'running', ?)",
@@ -43,6 +76,13 @@ def start_crawl(config: CrawlConfig):
         )
     lake.commit()
     lake.close()
-
     conn.close()
+
+    thread = threading.Thread(
+        target=_run_crawl,
+        args=(session_id, config.domain, config.start_urls, config.max_pages, config.use_proxies),
+        daemon=True,
+    )
+    thread.start()
+
     return {"id": session_id, "status": "running"}

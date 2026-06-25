@@ -1,0 +1,18 @@
+[Unit]
+Description=SelfLearningLM - Intelligent Web Crawler & Data Processor
+After=network.target
+
+[Service]
+Type=simple
+User=selflearninglm
+WorkingDirectory=/opt/selflearninglm
+ExecStart=/opt/selflearninglm/.venv/bin/uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+Environment=SELFLM_DEBUG=false
+Environment=PATH=/opt/selflearninglm/.venv/bin:/usr/bin
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
