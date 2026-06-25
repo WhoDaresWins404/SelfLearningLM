@@ -6,12 +6,8 @@
       <h3>Start New Crawl</h3>
       <div class="crawl-form">
         <div class="form-field">
-          <label>Domain</label>
-          <InputText v-model="form.domain" placeholder="example.com" />
-        </div>
-        <div class="form-field">
-          <label>Start URLs</label>
-          <Textarea v-model="form.urls" rows="3" placeholder="One URL per line" />
+          <label>Start URLs <span class="hint">(one per line — domain is auto-detected)</span></label>
+          <Textarea v-model="form.urls" rows="3" placeholder="https://example.com&#10;https://example.com/page-1" />
         </div>
         <div class="form-row">
           <div class="form-field">
@@ -57,7 +53,7 @@ import Column from 'primevue/column'
 
 const starting = ref(false)
 const sessions = ref([])
-const form = ref({ domain: '', urls: '', max_pages: 100, download_delay: 2.0, use_proxies: false })
+const form = ref({ urls: '', max_pages: 100, download_delay: 2.0, use_proxies: false })
 
 onMounted(async () => {
   const res = await listCrawls()
@@ -68,8 +64,10 @@ async function start() {
   starting.value = true
   try {
     const urls = form.value.urls.split('\n').filter(Boolean)
+    if (!urls.length) return
+    const domain = new URL(urls[0]).hostname
     await startCrawl({
-      domain: form.value.domain,
+      domain,
       start_urls: urls,
       max_pages: form.value.max_pages,
       download_delay: form.value.download_delay,
@@ -77,7 +75,7 @@ async function start() {
     })
     const res = await listCrawls()
     sessions.value = res.data
-    form.value = { domain: '', urls: '', max_pages: 100, download_delay: 2.0, use_proxies: false }
+    form.value = { urls: '', max_pages: 100, download_delay: 2.0, use_proxies: false }
   } finally {
     starting.value = false
   }
@@ -95,4 +93,5 @@ async function start() {
 .form-row .form-field { flex: 1; }
 .checkbox-field { display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.3rem; }
 .checkbox-field label { margin-bottom: 0; }
+.hint { font-weight: normal; font-size: 0.8rem; color: #94a3b8; }
 </style>
