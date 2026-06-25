@@ -29,7 +29,9 @@ def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_pro
     }
 
     runner = CrawlerRunner(settings=spider_settings)
+    logger.warning("BEFORE runner.crawl()")
     d = runner.crawl(GenericSpider, domain=domain, start_urls=start_urls, max_pages=max_pages, crawl_session_id=crawl_session_id)
+    logger.warning("AFTER runner.crawl() (d type=%s)", type(d).__name__)
 
     def _on_done(result):
         if isinstance(result, Failure):
@@ -39,6 +41,6 @@ def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_pro
         reactor.stop()
 
     d.addBoth(_on_done)
-    logger.warning("Starting reactor...")
+    logger.warning("BEFORE reactor.run()")
     reactor.run(installSignalHandlers=False)
     logger.warning("Reactor stopped.")
