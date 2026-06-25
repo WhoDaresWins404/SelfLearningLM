@@ -1,5 +1,5 @@
-from scrapy.crawler import CrawlerProcess
-from scrapy.utils.project import get_project_settings
+from twisted.internet import reactor
+from scrapy.crawler import CrawlerRunner
 
 from backend.app.config import settings
 from backend.crawler.spiders.generic_spider import GenericSpider
@@ -22,6 +22,7 @@ def run_spider(domain: str, start_urls: list[str], max_pages: int = 100, use_pro
         },
     }
 
-    process = CrawlerProcess(settings=spider_settings)
-    process.crawl(GenericSpider, domain=domain, start_urls=start_urls, max_pages=max_pages)
-    process.start()
+    runner = CrawlerRunner(settings=spider_settings)
+    d = runner.crawl(GenericSpider, domain=domain, start_urls=start_urls, max_pages=max_pages)
+    d.addBoth(lambda _: reactor.stop())
+    reactor.run(installSignalHandlers=False)

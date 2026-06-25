@@ -12,6 +12,21 @@ def _hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def _decode_headers(headers: Optional[dict]) -> dict:
+    if not headers:
+        return {}
+    result = {}
+    for k, v in headers.items():
+        key = k.decode("utf-8") if isinstance(k, bytes) else str(k)
+        if isinstance(v, (list, tuple)):
+            result[key] = [x.decode("utf-8") if isinstance(x, bytes) else str(x) for x in v]
+        elif isinstance(v, bytes):
+            result[key] = v.decode("utf-8")
+        else:
+            result[key] = str(v)
+    return result
+
+
 def store_blob(
     original_url: str,
     domain: str,
@@ -35,7 +50,7 @@ def store_blob(
            (file_path, url_hash, content_hash, original_url, domain, http_status, headers, proxy_used, crawl_session_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (str(file_path), url_hash, content_hash, original_url, domain, http_status,
-         json.dumps(headers or {}), proxy_used, crawl_session_id),
+         json.dumps(_decode_headers(headers)), proxy_used, crawl_session_id),
     )
     conn.commit()
     conn.close()
