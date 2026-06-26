@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.app.config import settings
 from backend.app.database import init_main_db, migrate_main_db, init_lake_db
-from backend.app.routers import crawls, dashboard, datasets, dead_letter, exports, process, proxies, records, training, validation
+from backend.app.routers import crawls, dashboard, datasets, dead_letter, exports, process, proxies, records, sources, training, validation
 
 app = FastAPI(title=settings.project_name, version="0.1.0")
 
@@ -16,6 +16,7 @@ app.include_router(dead_letter.router)
 app.include_router(proxies.router)
 app.include_router(process.router)
 app.include_router(records.router)
+app.include_router(sources.router)
 app.include_router(exports.router)
 app.include_router(training.router)
 app.include_router(validation.router)

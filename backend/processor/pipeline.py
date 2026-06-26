@@ -2,6 +2,8 @@ import json
 import hashlib
 from pathlib import Path
 
+from bs4 import BeautifulSoup
+
 from backend.app.database import get_main_connection, get_lake_connection
 from backend.processor.content_extractor import extract_content
 from backend.processor.training_formatter import FORMATTERS
@@ -21,6 +23,35 @@ def _is_processed(url: str, html: str) -> bool:
     ).fetchone()
     conn.close()
     return row is not None
+
+
+def _extract_fields(html: str, extractor_config: dict) -> dict:
+    """Run CSS selectors from extractor_config against HTML and return extracted values."""
+    soup = BeautifulSoup(html, "lxml")
+    result = {}
+    for field in extractor_config.get("fields", []):
+        name = field.get("name")
+        selector = field.get("selector", "")
+        sel_type = field.get("type", "css")
+        multiple = field.get("multiple", False)
+        if not name or not selector:
+            continue
+        if sel_type == "css":
+            if multiple:
+                tags = soup.select(selector)
+                result[name] = [t.get_text(strip=True) for t in tags if t.get_text(strip=True)]
+            else:
+                tag = soup.select_one(selector)
+                result[name] = tag.get_text(strip=True) if tag else ""
+        elif sel_type == "regex":
+            import re
+            matches = re.findall(selector, html, re.I)
+            result[name] = matches if multiple else (matches[0] if matches else "")
+        elif sel_type == "attr":
+            tag = soup.select_one(selector.get("tag", "*"))
+            attr = selector.get("attr", "")
+            result[name] = tag.get(attr, "") if tag else ""
+    return result
 
 
 def _score(content: dict) -> float:
@@ -87,10 +118,11 @@ def run_pipeline(domain: str = ""):
     lake = get_lake_connection()
     main = get_main_connection()
 
-    container_formats = {}
-    for row in main.execute("SELECT id, name, schema_def FROM containers").fetchall():
-        schema = json.loads(row["schema_def"])
-        container_formats[row["id"]] = schema.get("training_format", "plain_text")
+    sources = {}
+    for row in main.execute("SELECT * FROM sources WHERE enabled = 1").fetchall():
+        config = json.loads(row["config"])
+        source_domain = config.get("domain", row["name"])
+        sources[source_domain] = dict(row)
 
     query = "SELECT * FROM blobs"
     params = []
@@ -115,22 +147,28 @@ def run_pipeline(domain: str = ""):
         if not content.get("clean_text"):
             continue
 
+        source = sources.get(blob["domain"])
+        if source:
+            extractor_config = json.loads(source["extractor_config"])
+            fields = _extract_fields(html, extractor_config)
+            content["_extracted"] = fields
+
         quality = _score(content)
 
         url_hash = _hash(blob["original_url"])
         content_hash = _hash(html)
-        container_id = container_formats.get("default")
+        source_id = source["id"] if source else None
 
         cur = main.execute(
             """INSERT INTO records
-               (content_hash, url_hash, source_url, domain, container_id, extracted_data, raw_blob_path, quality_score, status)
+               (content_hash, url_hash, source_url, domain, source_id, extracted_data, raw_blob_path, quality_score, status)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
             (content_hash, url_hash, blob["original_url"], blob["domain"],
-             container_id, json.dumps(content), str(file_path), quality),
+             source_id, json.dumps(content), str(file_path), quality),
         )
         record_id = cur.lastrowid
 
-        fmt = container_formats.get(container_id, "plain_text") if container_id else "plain_text"
+        fmt = source["training_format"] if source else "plain_text"
         _store_training(main, record_id, content, fmt)
         _export_if_needed(main, record_id, fmt)
 

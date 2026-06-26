@@ -75,6 +75,17 @@ def init_main_db():
             FOREIGN KEY (record_id) REFERENCES records(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS sources (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT NOT NULL,
+            type            TEXT NOT NULL DEFAULT 'web',
+            config          TEXT NOT NULL DEFAULT '{}',
+            extractor_config TEXT NOT NULL DEFAULT '{}',
+            training_format TEXT NOT NULL DEFAULT 'plain_text',
+            enabled         INTEGER NOT NULL DEFAULT 1,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS export_targets (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             name            TEXT NOT NULL,
@@ -144,7 +155,7 @@ def init_main_db():
 def migrate_main_db():
     """Add columns introduced after initial schema creation."""
     conn = get_main_connection()
-    for col in ["status", "validated_by", "validated_at", "reviewer_notes"]:
+    for col in ["status", "validated_by", "validated_at", "reviewer_notes", "source_id"]:
         try:
             conn.execute(f"ALTER TABLE records ADD COLUMN {col} TEXT DEFAULT ''")
         except Exception:

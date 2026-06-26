@@ -5,6 +5,7 @@ const routes = [
   { path: '/data', name: 'DataBrowser', component: () => import('../views/DataBrowser.vue') },
   { path: '/validation', name: 'ValidationQueue', component: () => import('../views/ValidationQueue.vue') },
   { path: '/datasets', name: 'Datasets', component: () => import('../views/Datasets.vue') },
+  { path: '/sources', name: 'Sources', component: () => import('../views/Sources.vue') },
   { path: '/crawl', name: 'CrawlControl', component: () => import('../views/CrawlControl.vue') },
   { path: '/process', name: 'ProcessingConsole', component: () => import('../views/ProcessingConsole.vue') },
   { path: '/exports', name: 'ExportSettings', component: () => import('../views/ExportSettings.vue') },

@@ -21,6 +21,9 @@
         </router-link>
 
         <span class="nav-group-label">Ingestion</span>
+        <router-link to="/sources" class="nav-item" active-class="active">
+          <i class="pi pi-cloud"></i> Sources
+        </router-link>
         <router-link to="/crawl" class="nav-item" active-class="active">
           <i class="pi pi-send"></i> Crawl
         </router-link>
