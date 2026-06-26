@@ -1,9 +1,11 @@
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 
 from backend.app.database import get_main_connection
-from backend.exporter import export_training
+from backend.exporter import export_training, _parse_config
 
 router = APIRouter(prefix="/api/exports", tags=["exports"])
 
@@ -106,3 +108,20 @@ def target_stats(target_id: int):
     if not row:
         raise HTTPException(404, "Export target not found")
     return {"target_id": target_id, "total_exported": total}
+
+
+@router.get("/targets/{target_id}/download")
+def download_export(target_id: int):
+    conn = get_main_connection()
+    row = conn.execute("SELECT * FROM export_targets WHERE id = ?", (target_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "Export target not found")
+    config = _parse_config(row["config"])
+    path_str = config.get("path", "")
+    if not path_str:
+        raise HTTPException(400, "No file path configured for this target")
+    file_path = Path(path_str)
+    if not file_path.exists():
+        raise HTTPException(404, "Export file not found on disk")
+    return FileResponse(str(file_path), filename=file_path.name, media_type="application/octet-stream")

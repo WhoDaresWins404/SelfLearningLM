@@ -50,6 +50,7 @@
         </Column>
         <Column header="">
           <template #body="{ data }">
+            <Button icon="pi pi-eye" text rounded size="small" @click="viewExport(data)" />
             <Button icon="pi pi-upload" text rounded size="small" @click="runExport(data)" :loading="exporting === data.id" />
             <Button icon="pi pi-trash" text rounded severity="danger" size="small" @click="confirmDelete(data)" />
           </template>
@@ -124,6 +125,10 @@ async function runExport(target) {
   } finally {
     exporting.value = null
   }
+}
+
+function viewExport(target) {
+  window.open(`/api/exports/targets/${target.id}/download`, '_blank')
 }
 
 function confirmDelete(target) {
