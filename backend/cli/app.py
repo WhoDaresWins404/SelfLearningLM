@@ -36,5 +36,14 @@ def process(domain: str = ""):
     run_pipeline(domain=domain)
 
 
+@app.command("backfill-training")
+def backfill(domain: str = ""):
+    """Generate training data for existing records that don't have it yet."""
+    from backend.app.processor.pipeline import backfill_training_data
+    typer.echo(f"Backfilling training data for {domain or 'all domains'}...")
+    count = backfill_training_data(domain=domain)
+    typer.echo(f"Done. Processed {count} records.")
+
+
 if __name__ == "__main__":
     app()

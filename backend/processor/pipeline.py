@@ -121,3 +121,33 @@ def run_pipeline(domain: str = ""):
             _export_if_needed(main, record_id, container_formats.get(container_id, "plain_text"))
 
     main.close()
+
+
+def backfill_training_data(domain: str = ""):
+    conn = get_main_connection()
+    params = []
+    query = """SELECT r.id, r.source_url, r.domain, r.raw_blob_path, r.container_id, c.schema_def
+               FROM records r
+               JOIN containers c ON c.id = r.container_id
+               WHERE r.id NOT IN (SELECT record_id FROM training_data)"""
+    if domain:
+        query += " AND r.domain = ?"
+        params.append(domain)
+    rows = conn.execute(query, params).fetchall()
+    count = 0
+    for row in rows:
+        schema = json.loads(row["schema_def"])
+        fmt = schema.get("training_format", "plain_text")
+        file_path = Path(row["raw_blob_path"]) if row["raw_blob_path"] else None
+        if not file_path or not file_path.exists():
+            continue
+        html = file_path.read_text(encoding="utf-8", errors="replace")
+        content = extract_content(html)
+        if not content.get("clean_text"):
+            continue
+        _store_training(conn, row["id"], content, fmt)
+        _export_if_needed(conn, row["id"], fmt)
+        count += 1
+    conn.commit()
+    conn.close()
+    return count
