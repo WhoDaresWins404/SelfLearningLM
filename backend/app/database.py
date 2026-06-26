@@ -75,6 +75,26 @@ def init_main_db():
             FOREIGN KEY (record_id) REFERENCES records(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS export_targets (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT NOT NULL,
+            type            TEXT NOT NULL DEFAULT 'jsonl',
+            config          TEXT NOT NULL DEFAULT '{}',
+            format          TEXT NOT NULL DEFAULT 'plain_text',
+            auto_export     INTEGER NOT NULL DEFAULT 0,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS export_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_id       INTEGER NOT NULL,
+            record_id       INTEGER NOT NULL,
+            exported_at     TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (target_id) REFERENCES export_targets(id) ON DELETE CASCADE,
+            FOREIGN KEY (record_id) REFERENCES records(id) ON DELETE CASCADE,
+            UNIQUE(target_id, record_id)
+        );
+
         CREATE TABLE IF NOT EXISTS dead_letter (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             url             TEXT NOT NULL,

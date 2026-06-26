@@ -28,6 +28,9 @@
         <router-link to="/dead-letter" class="nav-item" active-class="active">
           <i class="pi pi-exclamation-triangle"></i> Dead Letter
         </router-link>
+        <router-link to="/exports" class="nav-item" active-class="active">
+          <i class="pi pi-upload"></i> Exports
+        </router-link>
       </nav>
     </aside>
     <main class="main-content">

@@ -7,6 +7,7 @@ const routes = [
   { path: '/containers/:id/edit', name: 'EditContainer', component: () => import('../views/ContainerEditor.vue') },
   { path: '/crawl', name: 'CrawlControl', component: () => import('../views/CrawlControl.vue') },
   { path: '/process', name: 'ProcessingConsole', component: () => import('../views/ProcessingConsole.vue') },
+  { path: '/exports', name: 'ExportSettings', component: () => import('../views/ExportSettings.vue') },
   { path: '/dead-letter', name: 'DeadLetter', component: () => import('../views/DeadLetterQueue.vue') },
   { path: '/proxies', name: 'Proxies', component: () => import('../views/ProxySettings.vue') },
   { path: '/data', name: 'DataBrowser', component: () => import('../views/DataBrowser.vue') },

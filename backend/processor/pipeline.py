@@ -11,6 +11,35 @@ from backend.processor.qualifier import score
 from backend.processor.refiner import refine
 from backend.processor.storage_writer import write_record
 from backend.processor.training_formatter import FORMATTERS
+from backend.exporter import export_training
+
+
+def _export_if_needed(conn, record_id: int, fmt: str):
+    targets = conn.execute(
+        "SELECT * FROM export_targets WHERE auto_export = 1 AND (format = ? OR format = 'all')",
+        (fmt,),
+    ).fetchall()
+    for target in targets:
+        already = conn.execute(
+            "SELECT 1 FROM export_log WHERE target_id = ? AND record_id = ?",
+            (target["id"], record_id),
+        ).fetchone()
+        if already:
+            continue
+        rows = conn.execute(
+            """SELECT td.format, td.content, r.source_url, r.domain, td.record_id
+               FROM training_data td JOIN records r ON r.id = td.record_id
+               WHERE td.record_id = ? AND (td.format = ? OR ? = 'all')
+               LIMIT 1""",
+            (record_id, target["format"], target["format"]),
+        ).fetchall()
+        if not rows:
+            continue
+        export_training([dict(r) for r in rows], dict(target))
+        conn.execute(
+            "INSERT OR IGNORE INTO export_log (target_id, record_id) VALUES (?, ?)",
+            (target["id"], record_id),
+        )
 
 
 def _store_training(conn, record_id: int, content: dict, fmt: str):
@@ -88,5 +117,7 @@ def run_pipeline(domain: str = ""):
             )
 
             _store_training(main, record_id, content, container_formats.get(container_id, "plain_text"))
+
+            _export_if_needed(main, record_id, container_formats.get(container_id, "plain_text"))
 
     main.close()
