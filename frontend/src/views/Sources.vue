@@ -37,7 +37,7 @@
       </div>
       <Button label="Add Field" icon="pi pi-plus" text size="small" @click="form.fields.push({ name: '', selector: '', type: 'css', multiple: false, attr: '' })" />
       <div class="form-actions">
-        <Button label="Create Source" icon="pi pi-plus" @click="createSource" :loading="creating" />
+        <Button label="Create Source" icon="pi pi-plus" @click="handleCreate" :loading="creating" />
       </div>
     </div>
 
@@ -131,7 +131,7 @@ async function refresh() {
   sources.value = res.data
 }
 
-async function createSource() {
+async function handleCreate() {
   creating.value = true
   try {
     const config = JSON.stringify({ domain: form.value.domain })
