@@ -2,7 +2,7 @@
   <div class="data-page">
     <h1 class="page-title">Data Browser</h1>
     <div class="filters">
-      <Select v-model="filter.container_id" :options="containerOptions" optionLabel="label" optionValue="value" placeholder="All Containers" class="filter-select" @change="search" />
+      <Select v-model="filter.status" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="All Statuses" class="filter-select" @change="search" />
       <InputText v-model="filter.q" placeholder="Search text..." class="filter-search" @keyup.enter="search" />
       <Button icon="pi pi-search" @click="search" />
       <Button label="Process" icon="pi pi-cog" severity="info" @click="$router.push('/process')" />
@@ -11,7 +11,14 @@
     <DataTable :value="records" stripedRows :loading="loading">
       <Column field="id" header="ID" sortable></Column>
       <Column field="domain" header="Domain" sortable></Column>
-      <Column field="source_url" header="Source URL"></Column>
+      <Column field="source_url" header="Source URL">
+        <template #body="{ data }">{{ truncateUrl(data.source_url) }}</template>
+      </Column>
+      <Column field="status" header="Status" sortable>
+        <template #body="{ data }">
+          <Tag :value="data.status" :severity="statusSeverity(data.status)" />
+        </template>
+      </Column>
       <Column field="quality_score" header="Score" sortable></Column>
       <Column field="created_at" header="Created" sortable></Column>
       <Column header="">
@@ -28,8 +35,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useContainersStore } from '../stores/containers'
+import { ref, onMounted } from 'vue'
 import { listRecords, searchRecords } from '../api/records'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -37,24 +43,29 @@ import Select from 'primevue/select'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
+import Tag from 'primevue/tag'
 
-const containersStore = useContainersStore()
 const records = ref([])
 const loading = ref(false)
-const filter = ref({ container_id: null, q: '' })
+const filter = ref({ status: '', q: '' })
 const viewerVisible = ref(false)
 const viewerUrl = ref('')
 const viewerTitle = ref('')
 
-const containerOptions = computed(() => [
-  { label: 'All Containers', value: null },
-  ...containersStore.items.map(c => ({ label: c.name, value: c.id })),
-])
+const statusOptions = [
+  { label: 'All Statuses', value: '' },
+  { label: 'Pending', value: 'pending' },
+  { label: 'Approved', value: 'approved' },
+  { label: 'Rejected', value: 'rejected' },
+]
 
-onMounted(async () => {
-  await containersStore.fetchAll()
-  await search()
-})
+function statusSeverity(s) {
+  if (s === 'approved') return 'success'
+  if (s === 'rejected') return 'danger'
+  return 'info'
+}
+
+onMounted(search)
 
 async function search() {
   loading.value = true
@@ -64,7 +75,7 @@ async function search() {
       records.value = res.data
     } else {
       const params = { limit: 100 }
-      if (filter.value.container_id) params.container_id = filter.value.container_id
+      if (filter.value.status) params.status = filter.value.status
       const res = await listRecords(params)
       records.value = res.data
     }
@@ -73,9 +84,13 @@ async function search() {
   }
 }
 
+function truncateUrl(url) {
+  return url && url.length > 60 ? url.slice(0, 60) + '...' : url
+}
+
 function exportTraining() {
   const params = new URLSearchParams()
-  if (filter.value.container_id) params.set('container_id', filter.value.container_id)
+  if (filter.value.status) params.set('status', filter.value.status)
   window.open(`/api/training/export?${params.toString()}`, '_blank')
 }
 

@@ -10,16 +10,6 @@ def serve(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
     uvicorn.run("backend.app.main:app", host=host, port=port, reload=reload)
 
 
-@app.command("seed")
-def seed():
-    """Run seed data manually."""
-    from backend.app.database import init_main_db
-    from backend.app.seed import seed_if_empty
-    init_main_db()
-    seed_if_empty()
-    typer.echo("Seed completed.")
-
-
 @app.command("crawl")
 def crawl(domain: str, urls: list[str] = typer.Option(..., "--url", "-u"), max_pages: int = 100):
     """Run a crawl session."""

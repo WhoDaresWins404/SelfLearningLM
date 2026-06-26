@@ -95,6 +95,30 @@ def init_main_db():
             UNIQUE(target_id, record_id)
         );
 
+        CREATE TABLE IF NOT EXISTS validation_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_id       INTEGER NOT NULL,
+            action          TEXT NOT NULL,
+            notes           TEXT DEFAULT '',
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (record_id) REFERENCES records(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS datasets (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT NOT NULL,
+            description     TEXT DEFAULT '',
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS dataset_records (
+            dataset_id      INTEGER NOT NULL,
+            record_id       INTEGER NOT NULL,
+            PRIMARY KEY (dataset_id, record_id),
+            FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE,
+            FOREIGN KEY (record_id) REFERENCES records(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS dead_letter (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             url             TEXT NOT NULL,
@@ -113,6 +137,18 @@ def init_main_db():
             created_at  TEXT NOT NULL DEFAULT (datetime('now'))
         );
     """)
+    conn.commit()
+    conn.close()
+
+
+def migrate_main_db():
+    """Add columns introduced after initial schema creation."""
+    conn = get_main_connection()
+    for col in ["status", "validated_by", "validated_at", "reviewer_notes"]:
+        try:
+            conn.execute(f"ALTER TABLE records ADD COLUMN {col} TEXT DEFAULT ''")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 

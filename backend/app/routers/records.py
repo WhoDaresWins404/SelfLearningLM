@@ -9,20 +9,23 @@ router = APIRouter(prefix="/api/records", tags=["records"])
 
 
 @router.get("")
-def list_records(container_id: int = 0, domain: str = "", limit: int = 50, offset: int = 0):
+def list_records(container_id: int = 0, domain: str = "", status: str = "", limit: int = 50, offset: int = 0):
     conn = get_main_connection()
     params = []
-    query = "SELECT * FROM records"
+    query = "SELECT r.*, c.name as container_name FROM records r LEFT JOIN containers c ON c.id = r.container_id"
     conditions = []
     if container_id:
-        conditions.append("container_id = ?")
+        conditions.append("r.container_id = ?")
         params.append(container_id)
     if domain:
-        conditions.append("domain = ?")
+        conditions.append("r.domain = ?")
         params.append(domain)
+    if status:
+        conditions.append("r.status = ?")
+        params.append(status)
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
-    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    query += " ORDER BY r.created_at DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     rows = conn.execute(query, params).fetchall()
     conn.close()

@@ -1,20 +1,61 @@
 import json
+import hashlib
 from pathlib import Path
 
-from backend.app.config import settings
 from backend.app.database import get_main_connection, get_lake_connection
-from backend.processor.analyzer import analyze_blob
 from backend.processor.content_extractor import extract_content
-from backend.processor.deduplicator import is_duplicate
-from backend.processor.extractors import extract
-from backend.processor.qualifier import score
-from backend.processor.refiner import refine
-from backend.processor.storage_writer import write_record
 from backend.processor.training_formatter import FORMATTERS
-from backend.exporter import export_training
+
+
+def _hash(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _is_processed(url: str, html: str) -> bool:
+    url_hash = _hash(url)
+    content_hash = _hash(html)
+    conn = get_main_connection()
+    row = conn.execute(
+        "SELECT 1 FROM records WHERE url_hash = ? OR content_hash = ? LIMIT 1",
+        (url_hash, content_hash),
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+
+def _score(content: dict) -> float:
+    score = 50.0
+    text_length = content.get("word_count", 0)
+    if text_length > 500:
+        score += 20
+    elif text_length > 100:
+        score += 10
+    if content.get("has_code"):
+        score += 10
+    if content.get("title"):
+        score += 10
+    return min(100.0, round(score, 1))
+
+
+def _store_training(conn, record_id: int, content: dict, fmt: str):
+    if fmt == "all":
+        for name in FORMATTERS:
+            formatted = FORMATTERS[name](content)
+            conn.execute(
+                "INSERT INTO training_data (record_id, format, content) VALUES (?, ?, ?)",
+                (record_id, name, formatted),
+            )
+    else:
+        formatter = FORMATTERS.get(fmt, FORMATTERS["plain_text"])
+        formatted = formatter(content)
+        conn.execute(
+            "INSERT INTO training_data (record_id, format, content) VALUES (?, ?, ?)",
+            (record_id, fmt, formatted),
+        )
 
 
 def _export_if_needed(conn, record_id: int, fmt: str):
+    from backend.exporter import export_training
     targets = conn.execute(
         "SELECT * FROM export_targets WHERE auto_export = 1 AND (format = ? OR format = 'all')",
         (fmt,),
@@ -42,31 +83,12 @@ def _export_if_needed(conn, record_id: int, fmt: str):
         )
 
 
-def _store_training(conn, record_id: int, content: dict, fmt: str):
-    if fmt == "all":
-        for name in FORMATTERS:
-            formatted = FORMATTERS[name](content)
-            conn.execute(
-                "INSERT INTO training_data (record_id, format, content) VALUES (?, ?, ?)",
-                (record_id, name, formatted),
-            )
-    else:
-        formatter = FORMATTERS.get(fmt, FORMATTERS["plain_text"])
-        formatted = formatter(content)
-        conn.execute(
-            "INSERT INTO training_data (record_id, format, content) VALUES (?, ?, ?)",
-            (record_id, fmt, formatted),
-        )
-
-
 def run_pipeline(domain: str = ""):
     lake = get_lake_connection()
     main = get_main_connection()
 
-    containers = {}
     container_formats = {}
     for row in main.execute("SELECT id, name, schema_def FROM containers").fetchall():
-        containers[row["name"]] = row["id"]
         schema = json.loads(row["schema_def"])
         container_formats[row["id"]] = schema.get("training_format", "plain_text")
 
@@ -86,40 +108,33 @@ def run_pipeline(domain: str = ""):
 
         html = file_path.read_text(encoding="utf-8")
 
-        if is_duplicate(blob["original_url"], html):
+        if _is_processed(blob["original_url"], html):
             continue
 
         content = extract_content(html)
-
         if not content.get("clean_text"):
             continue
 
-        matched = analyze_blob(html)
-        if not matched:
-            continue
+        quality = _score(content)
 
-        for container_name in matched:
-            container_id = containers.get(container_name)
-            if not container_id:
-                continue
+        url_hash = _hash(blob["original_url"])
+        content_hash = _hash(html)
+        container_id = container_formats.get("default")
 
-            extracted = extract(container_name, html)
-            refined = refine(extracted) if extracted else {}
-            quality = score(refined)
+        cur = main.execute(
+            """INSERT INTO records
+               (content_hash, url_hash, source_url, domain, container_id, extracted_data, raw_blob_path, quality_score, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+            (content_hash, url_hash, blob["original_url"], blob["domain"],
+             container_id, json.dumps(content), str(file_path), quality),
+        )
+        record_id = cur.lastrowid
 
-            record_id = write_record(
-                url=blob["original_url"],
-                domain=blob["domain"],
-                extracted=refined,
-                container_id=container_id,
-                raw_blob_path=str(file_path),
-                quality_score=quality,
-            )
+        fmt = container_formats.get(container_id, "plain_text") if container_id else "plain_text"
+        _store_training(main, record_id, content, fmt)
+        _export_if_needed(main, record_id, fmt)
 
-            _store_training(main, record_id, content, container_formats.get(container_id, "plain_text"))
-
-            _export_if_needed(main, record_id, container_formats.get(container_id, "plain_text"))
-
+    main.commit()
     main.close()
 
 

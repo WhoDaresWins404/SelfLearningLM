@@ -8,28 +8,35 @@
         <router-link to="/" class="nav-item" exact-active-class="active">
           <i class="pi pi-home"></i> Dashboard
         </router-link>
-        <span class="nav-group-label">Workflow</span>
 
-        <router-link to="/containers" class="nav-item" active-class="active">
-          <i class="pi pi-box"></i> 1. Containers
+        <span class="nav-group-label">Data</span>
+        <router-link to="/data" class="nav-item" active-class="active">
+          <i class="pi pi-database"></i> Data Browser
         </router-link>
-        <router-link to="/proxies" class="nav-item" active-class="active">
-          <i class="pi pi-shield"></i> 2. Proxies
+        <router-link to="/validation" class="nav-item" active-class="active">
+          <i class="pi pi-check-circle"></i> Validation
         </router-link>
+        <router-link to="/datasets" class="nav-item" active-class="active">
+          <i class="pi pi-folder"></i> Datasets
+        </router-link>
+
+        <span class="nav-group-label">Ingestion</span>
         <router-link to="/crawl" class="nav-item" active-class="active">
-          <i class="pi pi-send"></i> 3. Crawl
+          <i class="pi pi-send"></i> Crawl
         </router-link>
         <router-link to="/process" class="nav-item" active-class="active">
-          <i class="pi pi-cog"></i> 4. Process
+          <i class="pi pi-cog"></i> Process
         </router-link>
-        <router-link to="/data" class="nav-item" active-class="active">
-          <i class="pi pi-database"></i> 5. Data Browser
+
+        <span class="nav-group-label">System</span>
+        <router-link to="/exports" class="nav-item" active-class="active">
+          <i class="pi pi-upload"></i> Exports
         </router-link>
         <router-link to="/dead-letter" class="nav-item" active-class="active">
           <i class="pi pi-exclamation-triangle"></i> Dead Letter
         </router-link>
-        <router-link to="/exports" class="nav-item" active-class="active">
-          <i class="pi pi-upload"></i> Exports
+        <router-link to="/proxies" class="nav-item" active-class="active">
+          <i class="pi pi-shield"></i> Proxies
         </router-link>
       </nav>
     </aside>
@@ -38,9 +45,6 @@
     </main>
   </div>
 </template>
-
-<script setup>
-</script>
 
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
