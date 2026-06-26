@@ -193,6 +193,16 @@ def migrate_main_db():
             conn.execute(f"ALTER TABLE records ADD COLUMN {col} TEXT DEFAULT ''")
         except Exception:
             pass
+    for col in ["similarity_hash"]:
+        try:
+            conn.execute(f"ALTER TABLE records ADD COLUMN {col} TEXT DEFAULT ''")
+        except Exception:
+            pass
+    for col in ["refiner_config"]:
+        try:
+            conn.execute(f"ALTER TABLE sources ADD COLUMN {col} TEXT DEFAULT '{{}}'")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 

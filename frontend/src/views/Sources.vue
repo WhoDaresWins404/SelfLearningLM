@@ -23,6 +23,9 @@
         </div>
       </div>
 
+      <h4>Refinement Config</h4>
+      <p class="hint">JSON for per-source refinement settings. Supports: <code>boilerplate_patterns</code> (array), <code>min_quality</code> (number 0-100), <code>instruction_response</code>/<code>code_explanation</code>/<code>qa</code> (boolean).</p>
+      <Textarea v-model="form.refiner_config" rows="4" class="refiner-input" placeholder='{"boilerplate_patterns":["Site-specific boilerplate..."],"min_quality":30}' />
       <h4>Extraction Fields</h4>
       <p class="hint">CSS selectors to extract specific fields from the page.</p>
       <div class="fields-list">
@@ -90,6 +93,7 @@
 import { ref, onMounted } from 'vue'
 import { listSources, createSource, deleteSource, uploadFile } from '../api/sources'
 import InputText from 'primevue/inputtext'
+import Textarea from 'primevue/textarea'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
 import Button from 'primevue/button'
@@ -121,7 +125,7 @@ const fieldTypes = [
   { label: 'Attribute', value: 'attr' },
 ]
 const form = ref({
-  name: '', type: 'web', domain: '', training_format: 'plain_text', fields: [],
+  name: '', type: 'web', domain: '', training_format: 'plain_text', fields: [], refiner_config: '',
 })
 
 onMounted(refresh)
@@ -136,14 +140,16 @@ async function handleCreate() {
   try {
     const config = JSON.stringify({ domain: form.value.domain })
     const extractorConfig = JSON.stringify({ fields: form.value.fields })
+    const refinerConfig = form.value.refiner_config ? JSON.stringify(JSON.parse(form.value.refiner_config)) : '{}'
     await createSource({
       name: form.value.name,
       type: form.value.type,
       config,
       extractor_config: extractorConfig,
+      refiner_config: refinerConfig,
       training_format: form.value.training_format,
     })
-    form.value = { name: '', type: 'web', domain: '', training_format: 'plain_text', fields: [] }
+    form.value = { name: '', type: 'web', domain: '', training_format: 'plain_text', fields: [], refiner_config: '' }
     await refresh()
   } finally {
     creating.value = false
@@ -189,6 +195,7 @@ async function doDelete() {
 .form-field { flex: 1; min-width: 200px; }
 .form-field label { display: block; font-weight: 600; margin-bottom: 0.3rem; font-size: 0.85rem; }
 .form-field input { width: 100%; }
+.refiner-input { width: 100%; font-family: monospace; font-size: 0.85rem; }
 .type-select { width: 100%; }
 .fmt-select { width: 100%; }
 .fields-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }

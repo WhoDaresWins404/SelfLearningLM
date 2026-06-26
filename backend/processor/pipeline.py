@@ -1,5 +1,6 @@
 import json
 import hashlib
+import re
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -7,10 +8,49 @@ from bs4 import BeautifulSoup
 from backend.app.database import get_main_connection, get_lake_connection
 from backend.processor.content_extractor import extract_content
 from backend.processor.training_formatter import FORMATTERS
+from backend.processor.cleanup import refine_formatted_content
+
+_STOP_WORDS = {"the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+               "have", "has", "had", "do", "does", "did", "but", "if", "or", "and",
+               "in", "on", "at", "to", "for", "of", "with", "by", "from", "as"}
+
+_AUTO_REJECT_THRESHOLD = 20.0
 
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _simhash(text: str) -> int:
+    words = re.findall(r"\w+", text.lower())
+    v = [0] * 64
+    for w in words:
+        h = hash(w)
+        for i in range(64):
+            bit = (h >> i) & 1
+            v[i] += 1 if bit else -1
+    fingerprint = 0
+    for i in range(64):
+        if v[i] > 0:
+            fingerprint |= 1 << i
+    return fingerprint
+
+
+def _hamming_distance(a: int, b: int) -> int:
+    return bin(a ^ b).count("1")
+
+
+def _is_near_duplicate(content: str, conn, threshold: int = 8) -> bool:
+    fprint = _simhash(content)
+    rows = conn.execute("SELECT id, similarity_hash FROM records WHERE similarity_hash IS NOT NULL AND similarity_hash != ''").fetchall()
+    for r in rows:
+        try:
+            existing = int(r["similarity_hash"])
+            if _hamming_distance(fprint, existing) <= threshold:
+                return True
+        except (ValueError, TypeError):
+            continue
+    return False
 
 
 def _is_processed(url: str, html: str) -> bool:
@@ -25,8 +65,47 @@ def _is_processed(url: str, html: str) -> bool:
     return row is not None
 
 
+def _score(content: dict) -> float:
+    score = 50.0
+    text_length = content.get("word_count", 0)
+    if text_length > 500:
+        score += 20
+    elif text_length > 100:
+        score += 10
+    if content.get("has_code"):
+        score += 10
+    if content.get("title"):
+        score += 10
+    if content.get("is_raw_dump"):
+        score -= 40
+
+    text = content.get("clean_text", "")
+    if text:
+        total_chars = len(text)
+        alnum = sum(1 for c in text if c.isalnum() or c.isspace())
+        punct = sum(1 for c in text if c in ".,!?;:()[]{}\"'")
+        if total_chars > 0:
+            punct_density = punct / total_chars
+            if punct_density > 0.3:
+                score -= 15
+            elif punct_density < 0.01 and total_chars > 200:
+                score -= 10
+            alnum_ratio = alnum / total_chars
+            if alnum_ratio < 0.5:
+                score -= 20
+
+        words = text.lower().split()
+        if words:
+            stop_ratio = sum(1 for w in words if w in _STOP_WORDS) / len(words)
+            if stop_ratio < 0.05 and len(words) > 50:
+                score -= 15
+            if stop_ratio > 0.5:
+                score -= 10
+
+    return max(0.0, min(100.0, round(score, 1)))
+
+
 def _extract_fields(html: str, extractor_config: dict) -> dict:
-    """Run CSS selectors from extractor_config against HTML and return extracted values."""
     soup = BeautifulSoup(html, "lxml")
     result = {}
     for field in extractor_config.get("fields", []):
@@ -44,7 +123,6 @@ def _extract_fields(html: str, extractor_config: dict) -> dict:
                 tag = soup.select_one(selector)
                 result[name] = tag.get_text(strip=True) if tag else ""
         elif sel_type == "regex":
-            import re
             matches = re.findall(selector, html, re.I)
             result[name] = matches if multiple else (matches[0] if matches else "")
         elif sel_type == "attr":
@@ -54,33 +132,22 @@ def _extract_fields(html: str, extractor_config: dict) -> dict:
     return result
 
 
-def _score(content: dict) -> float:
-    score = 50.0
-    text_length = content.get("word_count", 0)
-    if text_length > 500:
-        score += 20
-    elif text_length > 100:
-        score += 10
-    if content.get("has_code"):
-        score += 10
-    if content.get("title"):
-        score += 10
-    if content.get("is_raw_dump"):
-        score -= 40
-    return max(0.0, min(100.0, round(score, 1)))
-
-
-def _store_training(conn, record_id: int, content: dict, fmt: str):
+def _store_training(conn, record_id: int, content: dict, fmt: str, refiner_config: dict | None = None):
+    raw_content = content
     if fmt == "all":
         for name in FORMATTERS:
-            formatted = FORMATTERS[name](content)
+            formatted = FORMATTERS[name](raw_content)
+            if refiner_config and refiner_config.get(name, True):
+                formatted = refine_formatted_content(formatted, name)
             conn.execute(
                 "INSERT INTO training_data (record_id, format, content) VALUES (?, ?, ?)",
                 (record_id, name, formatted),
             )
     else:
         formatter = FORMATTERS.get(fmt, FORMATTERS["plain_text"])
-        formatted = formatter(content)
+        formatted = formatter(raw_content)
+        if refiner_config and refiner_config.get(fmt, True):
+            formatted = refine_formatted_content(formatted, fmt)
         conn.execute(
             "INSERT INTO training_data (record_id, format, content) VALUES (?, ?, ?)",
             (record_id, fmt, formatted),
@@ -116,6 +183,27 @@ def _export_if_needed(conn, record_id: int, fmt: str):
         )
 
 
+def _parse_refiner_config(source: dict | None) -> tuple[list[str] | None, int | None, dict | None]:
+    extra_boilerplate = None
+    min_quality = None
+    refiner_flags = None
+    if source:
+        try:
+            config = json.loads(source["config"]) if isinstance(source["config"], str) else source["config"]
+            extra_boilerplate = config.get("boilerplate_patterns") or None
+        except (json.JSONDecodeError, TypeError):
+            pass
+        try:
+            refiner_config = json.loads(source.get("refiner_config", "{}")) if isinstance(source.get("refiner_config"), str) else source.get("refiner_config", {})
+            if isinstance(refiner_config, dict):
+                extra_boilerplate = refiner_config.get("boilerplate_patterns") or extra_boilerplate
+                min_quality = refiner_config.get("min_quality")
+                refiner_flags = {k: v for k, v in refiner_config.items() if k in ("instruction_response", "code_explanation", "qa", "plain_text", "all")}
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return extra_boilerplate, min_quality, refiner_flags
+
+
 def run_pipeline(domain: str = ""):
     lake = get_lake_connection()
     main = get_main_connection()
@@ -145,11 +233,16 @@ def run_pipeline(domain: str = ""):
         if _is_processed(blob["original_url"], html):
             continue
 
-        content = extract_content(html)
+        source = sources.get(blob["domain"])
+        extra_bp, min_qual, refiner_flags = _parse_refiner_config(source)
+
+        content = extract_content(html, extra_boilerplate=extra_bp)
         if not content.get("clean_text"):
             continue
 
-        source = sources.get(blob["domain"])
+        if _is_near_duplicate(content["clean_text"], main):
+            continue
+
         if source:
             extractor_config = json.loads(source["extractor_config"])
             fields = _extract_fields(html, extractor_config)
@@ -157,22 +250,29 @@ def run_pipeline(domain: str = ""):
 
         quality = _score(content)
 
+        if min_qual is not None and quality < min_qual:
+            continue
+
         url_hash = _hash(blob["original_url"])
         content_hash = _hash(html)
         source_id = source["id"] if source else None
+        simhash_val = str(_simhash(content.get("clean_text", "")))
+
+        status = "pending" if quality >= _AUTO_REJECT_THRESHOLD else "rejected"
 
         cur = main.execute(
             """INSERT INTO records
-               (content_hash, url_hash, source_url, domain, source_id, extracted_data, raw_blob_path, quality_score, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+               (content_hash, url_hash, source_url, domain, source_id, extracted_data, raw_blob_path, quality_score, status, similarity_hash)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (content_hash, url_hash, blob["original_url"], blob["domain"],
-             source_id, json.dumps(content), str(file_path), quality),
+             source_id, json.dumps(content), str(file_path), quality, status, simhash_val),
         )
         record_id = cur.lastrowid
 
-        fmt = source["training_format"] if source else "plain_text"
-        _store_training(main, record_id, content, fmt)
-        _export_if_needed(main, record_id, fmt)
+        if status == "pending":
+            fmt = source["training_format"] if source else "plain_text"
+            _store_training(main, record_id, content, fmt, refiner_flags)
+            _export_if_needed(main, record_id, fmt)
 
     main.commit()
     main.close()
@@ -183,7 +283,7 @@ def backfill_training_data(domain: str = ""):
     params = []
     query = """SELECT r.id, r.domain, r.source_id
                FROM records r
-               WHERE r.id NOT IN (SELECT record_id FROM training_data)"""
+               WHERE r.id NOT IN (SELECT record_id FROM training_data) AND r.status = 'approved'"""
     if domain:
         query += " AND r.domain = ?"
         params.append(domain)
@@ -195,6 +295,7 @@ def backfill_training_data(domain: str = ""):
     for row in rows:
         source = sources.get(row["source_id"])
         fmt = source["training_format"] if source else "plain_text"
+        _, _, refiner_flags = _parse_refiner_config(source)
         rec = conn.execute("SELECT raw_blob_path FROM records WHERE id = ?", (row["id"],)).fetchone()
         if not rec or not rec["raw_blob_path"]:
             continue
@@ -205,7 +306,7 @@ def backfill_training_data(domain: str = ""):
         content = extract_content(html)
         if not content.get("clean_text"):
             continue
-        _store_training(conn, row["id"], content, fmt)
+        _store_training(conn, row["id"], content, fmt, refiner_flags)
         _export_if_needed(conn, row["id"], fmt)
         count += 1
     conn.commit()
@@ -238,6 +339,8 @@ def reextract_records(domain: str = "") -> int:
             continue
 
         source = sources.get(row["source_id"])
+        extra_bp, min_qual, refiner_flags = _parse_refiner_config(source)
+
         if source:
             extractor_config = json.loads(source["extractor_config"])
             fields = _extract_fields(html, extractor_config)
@@ -247,15 +350,18 @@ def reextract_records(domain: str = "") -> int:
         content_hash = _hash(html)
         url_hash = _hash(row["source_url"] or html[:200])
         fmt = source["training_format"] if source else "plain_text"
+        simhash_val = str(_simhash(content.get("clean_text", "")))
+        status = "pending" if quality >= _AUTO_REJECT_THRESHOLD else "rejected"
 
         conn2 = get_main_connection()
         conn2.execute(
-            "UPDATE records SET extracted_data = ?, quality_score = ?, content_hash = ?, url_hash = ? WHERE id = ?",
-            (json.dumps(content), quality, content_hash, url_hash, row["id"]),
+            "UPDATE records SET extracted_data = ?, quality_score = ?, content_hash = ?, url_hash = ?, similarity_hash = ?, status = ? WHERE id = ?",
+            (json.dumps(content), quality, content_hash, url_hash, simhash_val, status, row["id"]),
         )
         conn2.execute("DELETE FROM training_data WHERE record_id = ?", (row["id"],))
-        _store_training(conn2, row["id"], content, fmt)
-        _export_if_needed(conn2, row["id"], fmt)
+        if status == "pending":
+            _store_training(conn2, row["id"], content, fmt, refiner_flags)
+            _export_if_needed(conn2, row["id"], fmt)
         conn2.commit()
         conn2.close()
         count += 1

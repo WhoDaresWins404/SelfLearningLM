@@ -19,11 +19,11 @@ def list_sources():
 
 
 @router.post("", status_code=201)
-def create_source(name: str, type: str = "web", config: str = "{}", extractor_config: str = "{}", training_format: str = "plain_text"):
+def create_source(name: str, type: str = "web", config: str = "{}", extractor_config: str = "{}", training_format: str = "plain_text", refiner_config: str = "{}"):
     conn = get_main_connection()
     cur = conn.execute(
-        "INSERT INTO sources (name, type, config, extractor_config, training_format) VALUES (?, ?, ?, ?, ?)",
-        (name, type, config, extractor_config, training_format),
+        "INSERT INTO sources (name, type, config, extractor_config, training_format, refiner_config) VALUES (?, ?, ?, ?, ?, ?)",
+        (name, type, config, extractor_config, training_format, refiner_config),
     )
     conn.commit()
     row = conn.execute("SELECT * FROM sources WHERE id = ?", (cur.lastrowid,)).fetchone()

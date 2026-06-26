@@ -27,9 +27,6 @@ def _detect_lang_group(lang: str) -> str:
 
 
 def reconstruct_code_block(code_block: str) -> str:
-    """Reconstruct a tokenized/fragmented code block by joining tokens,
-    fixing punctuation spacing, and restoring language-appropriate line breaks."""
-
     match = re.match(r'(```(\w*)\n)(.*?)(```)', code_block, flags=re.DOTALL)
     if not match:
         return code_block
@@ -39,15 +36,12 @@ def reconstruct_code_block(code_block: str) -> str:
     code = match.group(3)
     suffix = match.group(4)
 
-    # 1. Split into lines, strip, filter empty
     lines = [l.strip() for l in code.split("\n") if l.strip()]
     if not lines:
         return code_block
 
-    # 2. Join into a single space-separated string
     code = " ".join(lines)
 
-    # 3. Fix spacing around punctuation
     code = re.sub(r"\s+([\(\[\{,;\)\]])", r"\1", code)
     code = re.sub(r"([\(\[])\s+", r"\1", code)
     code = re.sub(r"(\w)\s+\*", r"\1*", code)
@@ -56,7 +50,6 @@ def reconstruct_code_block(code_block: str) -> str:
     code = re.sub(r"\s*->\s*", "->", code)
     code = re.sub(r"\s*::\s*", "::", code)
 
-    # 4. Restore line breaks based on language
     group = _detect_lang_group(lang)
     if group == "python":
         code = re.sub(r"(:\s*)$", r":\n", code, flags=re.MULTILINE)
@@ -75,29 +68,33 @@ def reconstruct_code_block(code_block: str) -> str:
     else:
         code = re.sub(r"([;{}])\s*", r"\1\n", code)
         code = re.sub(r"(#\w+.*?)\s+(?=[a-zA-Z_#])", r"\1\n", code)
-        code = re.sub(r"(#\s*include\s*<\s*[^>]+\s*>)\s*", r"\1\n", code)
-        code = re.sub(r"(#\s*include\s*\"\s*[^\"]+\s*\")\s*", r"\1\n", code)
 
-    # 5. Collapse multiple newlines
     code = re.sub(r"\n{3,}", "\n\n", code)
 
     return f"{prefix}{code.strip()}\n{suffix}"
 
 
-def clean_code_text(text: str) -> str:
-    """Clean text that may contain code fences, applying reconstruction to code blocks."""
+def fix_sentence_boundaries(text: str) -> str:
+    """Rejoin sentences broken across line boundaries by extraction."""
+    if not text:
+        return text
     parts = re.split(r'(```.*?```)', text, flags=re.DOTALL)
-    cleaned = []
+    fixed = []
     for part in parts:
         if part.startswith("```") and part.endswith("```"):
-            cleaned.append(reconstruct_code_block(part))
+            fixed.append(part)
         else:
-            cleaned.append(part)
-    return "".join(cleaned)
+            result = part
+            result = re.sub(r'(\b(?:e|g|i|ie|vs|etc|al|approx|dept|est|govt|incl|mt|no|st|vs)\.)\n\s*([a-z])', r'\1 \2', result)
+            result = re.sub(r'(\b[A-Z][a-z]{1,3}\.)\n\s*([a-z])', r'\1 \2', result)
+            result = re.sub(r'([.!?])\n\s*\n', r'\1\n\n', result)
+            result = re.sub(r'([a-z,;])\n\s*([a-z])', r'\1 \2', result)
+            result = re.sub(r'(\w)\n\s*(\w)', lambda m: m.group(1) + ' ' + m.group(2) if m.group(2)[0].islower() else m.group(0), result)
+            fixed.append(result)
+    return "".join(fixed)
 
 
 def clean_prose(text: str) -> str:
-    """Fix glued words in prose text."""
     if not text:
         return text
     text = re.sub(r'([\)\]\}])([a-z])', r'\1 \2', text)
@@ -113,7 +110,6 @@ def clean_prose(text: str) -> str:
 
 
 def clean_content(text: str) -> str:
-    """Clean a string that may contain mixed prose and ```code blocks```."""
     parts = re.split(r'(```.*?```)', text, flags=re.DOTALL)
     cleaned = []
     for part in parts:
@@ -125,7 +121,6 @@ def clean_content(text: str) -> str:
 
 
 def clean_sections(sections: list[dict]) -> list[dict]:
-    """Clean all paragraph text within sections."""
     for sec in sections:
         cleaned_paras = []
         for p in sec.get("paragraphs", []):
@@ -137,8 +132,83 @@ def clean_sections(sections: list[dict]) -> list[dict]:
     return sections
 
 
+# --- Phase 2.3: Format-specific refiners ---
+
+def refine_instruction_response(lines: list[dict]) -> list[dict]:
+    filtered = []
+    for pair in lines:
+        inst = pair.get("instruction", "").strip()
+        resp = pair.get("response", "").strip()
+        if not inst or not resp:
+            continue
+        if len(resp.split()) < 5:
+            continue
+        if inst == resp:
+            continue
+        filtered.append({"instruction": inst, "response": resp})
+    return filtered
+
+
+def refine_code_explanation(lines: list[dict]) -> list[dict]:
+    filtered = []
+    for pair in lines:
+        inst = pair.get("instruction", "").strip()
+        resp = pair.get("response", "").strip()
+        if not inst or not resp:
+            continue
+        if len(resp.split()) < 2 and len(inst.split()) < 2:
+            continue
+        if "```" not in resp and "```" not in inst:
+            continue
+        filtered.append({"instruction": inst, "response": resp})
+    return filtered
+
+
+def refine_qa(lines: list[dict]) -> list[dict]:
+    filtered = []
+    for pair in lines:
+        question = pair.get("instruction", "").strip()
+        answer = pair.get("response", "").strip()
+        if not question or not answer:
+            continue
+        if not question.endswith("?"):
+            continue
+        if len(answer.split()) < 3:
+            continue
+        if len(question) < 5:
+            continue
+        filtered.append({"instruction": question, "response": answer})
+    return filtered
+
+
+FORMAT_REFINERS = {
+    "instruction_response": refine_instruction_response,
+    "code_explanation": refine_code_explanation,
+    "qa": refine_qa,
+}
+
+
+def refine_formatted_content(content: str, fmt: str) -> str:
+    refiner = FORMAT_REFINERS.get(fmt)
+    if not refiner:
+        return content
+    lines = []
+    for raw_line in content.strip().split("\n"):
+        if not raw_line.strip():
+            continue
+        try:
+            obj = json.loads(raw_line)
+            if isinstance(obj, dict) and "instruction" in obj:
+                lines.append(obj)
+        except json.JSONDecodeError:
+            pass
+    if not lines:
+        return content
+    filtered = refiner(lines)
+    return "\n".join(json.dumps(l, ensure_ascii=False) for l in filtered)
+
+
 def clean_jsonl_file(input_path: str, output_path: str) -> int:
-    """Standalone: read a JSONL file, clean all content fields, write output."""
     count = 0
     with open(input_path, "r", encoding="utf-8") as fin, \
          open(output_path, "w", encoding="utf-8") as fout:

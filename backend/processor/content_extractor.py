@@ -2,16 +2,14 @@ import re
 import json
 
 import trafilatura
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 
-from backend.processor.cleanup import clean_content, clean_sections
+from backend.processor.cleanup import clean_content, clean_sections, fix_sentence_boundaries
 
-# Minimum lines/characters for a code block to be considered "real" code
 _MIN_CODE_LINES = 3
 _MIN_CODE_CHARS = 40
 
-# Boilerplate patterns (case-insensitive)
-_BOILERPLATE_PATTERNS = [
+_BOILERPLATE_LINE_PATTERNS = [
     r"◀\s*Back to the Blog",
     r"Back to the Blog",
     r"Written on\s+\w+ \d+,?\s*\d{4}",
@@ -28,24 +26,117 @@ _BOILERPLATE_PATTERNS = [
     r"\d+\s*(comments|replies)",
     r"Follow me on",
     r"Subscribe to",
+    r"^\s*Tags?\s*$",
+    r"^\s*Share\s*$",
+    r"^\s*Comments?\s*$",
+    r"^\s*Advertisement\s*$",
+    r"^\s*Sponsored\s*$",
+]
+
+_NOISE_CLASS_PATTERNS = [
+    "comment", "sidebar", "advert", "ad-", "social", "share", "related",
+    "recommended", "widget", "newsletter", "subscribe", "popular",
+    "trending", "footer", "cookie", "banner", "modal", "overlay",
+    "breadcrumb", "pagination", "toc", "table.of.contents",
+]
+
+_HIDDEN_STYLE_PATTERNS = [
+    r"display\s*:\s*none",
+    r"visibility\s*:\s*hidden",
+    r"opacity\s*:\s*0",
+    r"position\s*:\s*absolute;\s*(left|top)\s*:\s*-\d+",
 ]
 
 
-def _clean_boilerplate(text: str) -> str:
+def _sanitize_html(html: str) -> str:
+    soup = BeautifulSoup(html, "lxml")
+
+    for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
+        comment.extract()
+
+    for tag in soup.find_all(["script", "style", "nav", "header", "footer", "aside", "noscript"]):
+        tag.decompose()
+
+    for tag in soup.find_all(style=True):
+        style = tag.get("style", "").lower()
+        for pat in _HIDDEN_STYLE_PATTERNS:
+            if re.search(pat, style):
+                tag.decompose()
+                break
+
+    for tag in soup.find_all(True):
+        classes = " ".join(tag.get("class", []))
+        if classes:
+            cls_lower = classes.lower()
+            for noise in _NOISE_CLASS_PATTERNS:
+                if noise in cls_lower:
+                    tag.decompose()
+                    break
+
+    return str(soup)
+
+
+def _extract_tables(html: str) -> list[str]:
+    soup = BeautifulSoup(html, "lxml")
+    tables = []
+    for table in soup.find_all("table"):
+        rows = []
+        for tr in table.find_all("tr"):
+            cells = []
+            for cell in tr.find_all(["td", "th"]):
+                text = cell.get_text(strip=True)
+                cells.append(text)
+            if cells:
+                rows.append(cells)
+        if len(rows) >= 2:
+            md_rows = []
+            for i, row in enumerate(rows):
+                md_rows.append("| " + " | ".join(row) + " |")
+                if i == 0:
+                    header_sep = "| " + " | ".join("---" for _ in row) + " |"
+                    md_rows.append(header_sep)
+            tables.append("\n".join(md_rows))
+    return tables
+
+
+def _clean_boilerplate(text: str, extra_patterns: list[str] | None = None) -> str:
+    patterns = list(_BOILERPLATE_LINE_PATTERNS)
+    if extra_patterns:
+        patterns.extend(extra_patterns)
+
     lines = text.split("\n")
-    cleaned = []
-    for line in lines:
-        stripped = line.strip()
+    result = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
         if not stripped:
+            i += 1
             continue
         skip = False
-        for pat in _BOILERPLATE_PATTERNS:
+        for pat in patterns:
             if re.search(pat, stripped, re.IGNORECASE):
                 skip = True
                 break
-        if not skip:
-            cleaned.append(line)
-    return "\n".join(cleaned)
+        if skip:
+            i += 1
+            continue
+        block_end = i
+        while block_end < len(lines) and lines[block_end].strip():
+            block_end += 1
+        block_lines = lines[i:block_end]
+        block_text = "\n".join(bl for bl in block_lines if bl.strip())
+        boilerplate_line_count = 0
+        total_line_count = len(block_lines)
+        for bl in block_lines:
+            s = bl.strip()
+            if not s or any(re.search(pat, s, re.IGNORECASE) for pat in patterns):
+                boilerplate_line_count += 1
+        if total_line_count > 2 and boilerplate_line_count > total_line_count * 0.6:
+            i = block_end
+            continue
+        result.extend(block_lines)
+        i = block_end
+    return "\n".join(result)
 
 
 def _is_raw_dump(text: str) -> bool:
@@ -60,21 +151,6 @@ def _is_raw_dump(text: str) -> bool:
     if json_line_count > 10 and json_line_count > len(stripped.split("\n")) * 0.5:
         return True
     return False
-
-
-def _merge_adjacent_code_blocks(blocks: list[dict]) -> list[dict]:
-    if not blocks:
-        return blocks
-    merged = [blocks[0]]
-    for b in blocks[1:]:
-        last = merged[-1]
-        if b["type"] == last["type"] == "code":
-            if b.get("gap", 99) <= 1:
-                last["text"] += "\n" + b["text"]
-                last["lines"] = last["text"].count("\n") + 1
-                continue
-        merged.append(b)
-    return merged
 
 
 def _extract_title(soup: BeautifulSoup) -> str:
@@ -200,54 +276,39 @@ def _extract_sections_from_html(html: str) -> list[dict]:
     return sections
 
 
-def _build_clean_text(sections: list[dict]) -> str:
-    parts = []
-    for s in sections:
-        heading = s.get("heading", "")
-        paras = s.get("paragraphs", [])
-        if heading:
-            parts.append(f"## {heading}")
-        for p in paras:
-            parts.append(p)
-    return "\n\n".join(parts)
-
-
-def _fix_inline_code_spacing(text: str) -> str:
-    text = re.sub(r"(\S)(```)", r"\1 \2", text)
-    text = re.sub(r"(```)(\S)", r"\1 \2", text)
-    text = re.sub(r"([a-zA-Z0-9)])([\[({])", r"\1 \2", text)
-    text = re.sub(r"([\]})])([a-zA-Z0-9(])", r"\1 \2", text)
-    return text
-
-
-def extract_content(html: str) -> dict:
-    soup = BeautifulSoup(html, "lxml")
-    for tag in soup.find_all(["script", "style", "nav", "header", "footer", "aside"]):
-        tag.decompose()
-
+def extract_content(html: str, extra_boilerplate: list[str] | None = None) -> dict:
+    sanitized = _sanitize_html(html)
+    soup = BeautifulSoup(sanitized, "lxml")
     title = _extract_title(soup)
-    code_blocks = _extract_code_blocks(html)
+
+    code_blocks = _extract_code_blocks(sanitized)
+    tables = _extract_tables(sanitized)
 
     clean_text = ""
     xml_output = ""
     try:
-        result = trafilatura.extract(html, output_format="txt", include_links=False, include_images=False, include_tables=True, no_fallback=False)
+        result = trafilatura.extract(sanitized, output_format="txt", include_links=False, include_images=False, include_tables=True, no_fallback=False)
         if result and len(result.strip()) > 100:
             clean_text = result.strip()
-        xml_result = trafilatura.extract(html, output_format="xml", include_links=False, include_images=False, include_tables=True, no_fallback=False)
+        xml_result = trafilatura.extract(sanitized, output_format="xml", include_links=False, include_images=False, include_tables=True, no_fallback=False)
         if xml_result:
             xml_output = xml_result
     except Exception:
         pass
 
     if clean_text:
-        sections = _extract_sections_from_trafilatura_xml(xml_output) if xml_output else _extract_sections_from_html(html)
-        clean_text = _clean_boilerplate(clean_text)
+        sections = _extract_sections_from_trafilatura_xml(xml_output) if xml_output else _extract_sections_from_html(sanitized)
+        clean_text = _clean_boilerplate(clean_text, extra_boilerplate)
     else:
         clean_text = soup.get_text("\n", strip=True)
-        sections = _extract_sections_from_html(html)
+        sections = _extract_sections_from_html(sanitized)
 
-    clean_text = _fix_inline_code_spacing(clean_text)
+    if tables:
+        clean_text += "\n\n" + "\n\n".join(tables)
+        if sections:
+            sections.append({"heading": "Tables", "paragraphs": tables})
+
+    clean_text = fix_sentence_boundaries(clean_text)
     clean_text = clean_content(clean_text)
     sections = clean_sections(sections)
 
