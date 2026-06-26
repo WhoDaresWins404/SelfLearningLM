@@ -35,5 +35,14 @@ def backfill(domain: str = ""):
     typer.echo(f"Done. Processed {count} records.")
 
 
+@app.command("reextract")
+def reextract(domain: str = ""):
+    """Re-extract content for existing records using updated extractors and regenerate training data."""
+    from backend.processor.pipeline import reextract_records
+    typer.echo(f"Re-extracting content for {domain or 'all domains'}...")
+    count = reextract_records(domain=domain)
+    typer.echo(f"Done. Re-extracted {count} records.")
+
+
 if __name__ == "__main__":
     app()

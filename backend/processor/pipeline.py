@@ -181,20 +181,25 @@ def run_pipeline(domain: str = ""):
 def backfill_training_data(domain: str = ""):
     conn = get_main_connection()
     params = []
-    query = """SELECT r.id, r.source_url, r.domain, r.raw_blob_path, r.container_id, c.schema_def
+    query = """SELECT r.id, r.domain, r.source_id
                FROM records r
-               JOIN containers c ON c.id = r.container_id
                WHERE r.id NOT IN (SELECT record_id FROM training_data)"""
     if domain:
         query += " AND r.domain = ?"
         params.append(domain)
     rows = conn.execute(query, params).fetchall()
+    sources = {}
+    for row in conn.execute("SELECT * FROM sources").fetchall():
+        sources[row["id"]] = dict(row)
     count = 0
     for row in rows:
-        schema = json.loads(row["schema_def"])
-        fmt = schema.get("training_format", "plain_text")
-        file_path = Path(row["raw_blob_path"]) if row["raw_blob_path"] else None
-        if not file_path or not file_path.exists():
+        source = sources.get(row["source_id"])
+        fmt = source["training_format"] if source else "plain_text"
+        rec = conn.execute("SELECT raw_blob_path FROM records WHERE id = ?", (row["id"],)).fetchone()
+        if not rec or not rec["raw_blob_path"]:
+            continue
+        file_path = Path(rec["raw_blob_path"])
+        if not file_path.exists():
             continue
         html = file_path.read_text(encoding="utf-8", errors="replace")
         content = extract_content(html)
@@ -205,4 +210,53 @@ def backfill_training_data(domain: str = ""):
         count += 1
     conn.commit()
     conn.close()
+    return count
+
+
+def reextract_records(domain: str = "") -> int:
+    conn = get_main_connection()
+    sources = {}
+    for row in conn.execute("SELECT * FROM sources").fetchall():
+        sources[row["id"]] = dict(row)
+
+    params = []
+    query = "SELECT id, raw_blob_path, source_id, domain, source_url FROM records WHERE raw_blob_path IS NOT NULL AND raw_blob_path != ''"
+    if domain:
+        query += " AND domain = ?"
+        params.append(domain)
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+
+    count = 0
+    for row in rows:
+        file_path = Path(row["raw_blob_path"])
+        if not file_path.exists():
+            continue
+        html = file_path.read_text(encoding="utf-8", errors="replace")
+        content = extract_content(html)
+        if not content.get("clean_text"):
+            continue
+
+        source = sources.get(row["source_id"])
+        if source:
+            extractor_config = json.loads(source["extractor_config"])
+            fields = _extract_fields(html, extractor_config)
+            content["_extracted"] = fields
+
+        quality = _score(content)
+        content_hash = _hash(html)
+        url_hash = _hash(row["source_url"] or html[:200])
+        fmt = source["training_format"] if source else "plain_text"
+
+        conn2 = get_main_connection()
+        conn2.execute(
+            "UPDATE records SET extracted_data = ?, quality_score = ?, content_hash = ?, url_hash = ? WHERE id = ?",
+            (json.dumps(content), quality, content_hash, url_hash, row["id"]),
+        )
+        conn2.execute("DELETE FROM training_data WHERE record_id = ?", (row["id"],))
+        _store_training(conn2, row["id"], content, fmt)
+        _export_if_needed(conn2, row["id"], fmt)
+        conn2.commit()
+        conn2.close()
+        count += 1
     return count
