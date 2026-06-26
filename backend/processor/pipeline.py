@@ -183,11 +183,10 @@ def _export_if_needed(conn, record_id: int, fmt: str):
         )
 
 
-def _parse_refiner_config(source: dict | None) -> tuple[list[str] | None, int | None, dict | None, dict | None]:
+def _parse_refiner_config(source: dict | None) -> tuple[list[str] | None, int | None, dict | None]:
     extra_boilerplate = None
     min_quality = None
     refiner_flags = None
-    word_fixes = None
     if source:
         try:
             config = json.loads(source["config"]) if isinstance(source["config"], str) else source["config"]
@@ -199,11 +198,10 @@ def _parse_refiner_config(source: dict | None) -> tuple[list[str] | None, int | 
             if isinstance(refiner_config, dict):
                 extra_boilerplate = refiner_config.get("boilerplate_patterns") or extra_boilerplate
                 min_quality = refiner_config.get("min_quality")
-                word_fixes = refiner_config.get("word_fixes")
                 refiner_flags = {k: v for k, v in refiner_config.items() if k in ("instruction_response", "code_explanation", "qa", "plain_text", "all")}
         except (json.JSONDecodeError, TypeError):
             pass
-    return extra_boilerplate, min_quality, refiner_flags, word_fixes
+    return extra_boilerplate, min_quality, refiner_flags
 
 
 def run_pipeline(domain: str = ""):
@@ -236,9 +234,9 @@ def run_pipeline(domain: str = ""):
             continue
 
         source = sources.get(blob["domain"])
-        extra_bp, min_qual, refiner_flags, word_fixes = _parse_refiner_config(source)
+        extra_bp, min_qual, refiner_flags = _parse_refiner_config(source)
 
-        content = extract_content(html, extra_boilerplate=extra_bp, custom_word_fixes=word_fixes)
+        content = extract_content(html, extra_boilerplate=extra_bp)
         if not content.get("clean_text"):
             continue
 
@@ -297,7 +295,7 @@ def backfill_training_data(domain: str = ""):
     for row in rows:
         source = sources.get(row["source_id"])
         fmt = source["training_format"] if source else "plain_text"
-        _, _, refiner_flags, word_fixes = _parse_refiner_config(source)
+        _, _, refiner_flags = _parse_refiner_config(source)
         rec = conn.execute("SELECT raw_blob_path FROM records WHERE id = ?", (row["id"],)).fetchone()
         if not rec or not rec["raw_blob_path"]:
             continue
@@ -305,7 +303,7 @@ def backfill_training_data(domain: str = ""):
         if not file_path.exists():
             continue
         html = file_path.read_text(encoding="utf-8", errors="replace")
-        content = extract_content(html, custom_word_fixes=word_fixes)
+        content = extract_content(html)
         if not content.get("clean_text"):
             continue
         _store_training(conn, row["id"], content, fmt, refiner_flags)
@@ -336,11 +334,12 @@ def reextract_records(domain: str = "") -> int:
         if not file_path.exists():
             continue
         html = file_path.read_text(encoding="utf-8", errors="replace")
-        source = sources.get(row["source_id"])
-        extra_bp, min_qual, refiner_flags, word_fixes = _parse_refiner_config(source)
-        content = extract_content(html, extra_boilerplate=extra_bp, custom_word_fixes=word_fixes)
+        content = extract_content(html)
         if not content.get("clean_text"):
             continue
+
+        source = sources.get(row["source_id"])
+        extra_bp, min_qual, refiner_flags = _parse_refiner_config(source)
 
         if source:
             extractor_config = json.loads(source["extractor_config"])

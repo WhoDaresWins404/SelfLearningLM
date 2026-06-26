@@ -278,7 +278,7 @@ def _extract_sections_from_html(html: str) -> list[dict]:
     return sections
 
 
-def extract_content(html: str, extra_boilerplate: list[str] | None = None, custom_word_fixes: dict | None = None) -> dict:
+def extract_content(html: str, extra_boilerplate: list[str] | None = None) -> dict:
     sanitized = _sanitize_html(html)
     soup = BeautifulSoup(sanitized, "lxml")
     title = _extract_title(soup)
@@ -311,8 +311,8 @@ def extract_content(html: str, extra_boilerplate: list[str] | None = None, custo
             sections.append({"heading": "Tables", "paragraphs": tables})
 
     clean_text = fix_sentence_boundaries(clean_text)
-    clean_text = clean_content(clean_text, custom_word_fixes=custom_word_fixes)
-    sections = clean_sections(sections, custom_word_fixes=custom_word_fixes)
+    clean_text = clean_content(clean_text)
+    sections = clean_sections(sections)
 
     is_dump = _is_raw_dump(clean_text) if clean_text else False
 
