@@ -1,6 +1,6 @@
 import hashlib
 
-from backend.storage.lake import blob_exists_by_url, blob_exists_by_content
+from backend.app.database import get_main_connection
 
 
 def _hash(value: str) -> str:
@@ -8,4 +8,12 @@ def _hash(value: str) -> str:
 
 
 def is_duplicate(url: str, html: str) -> bool:
-    return blob_exists_by_url(url) or blob_exists_by_content(html)
+    url_hash = _hash(url)
+    content_hash = _hash(html)
+    conn = get_main_connection()
+    row = conn.execute(
+        "SELECT 1 FROM records WHERE url_hash = ? OR content_hash = ? LIMIT 1",
+        (url_hash, content_hash),
+    ).fetchone()
+    conn.close()
+    return row is not None
