@@ -140,6 +140,39 @@ def init_main_db():
             created_at      TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS analysis_results (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id        INTEGER NOT NULL,
+            record_index    INTEGER NOT NULL,
+            format          TEXT DEFAULT '',
+            content_sample  TEXT DEFAULT '',
+            word_count      INTEGER DEFAULT 0,
+            char_count      INTEGER DEFAULT 0,
+            est_token_count INTEGER DEFAULT 0,
+            has_title       INTEGER DEFAULT 0,
+            has_code        INTEGER DEFAULT 0,
+            has_qa          INTEGER DEFAULT 0,
+            section_count   INTEGER DEFAULT 0,
+            has_instruction INTEGER DEFAULT 0,
+            has_response    INTEGER DEFAULT 0,
+            line_count      INTEGER DEFAULT 0,
+            quality_score   REAL DEFAULT 0.0,
+            is_reformattable INTEGER DEFAULT 0,
+            flags           TEXT DEFAULT '[]',
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS analysis_batches (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename        TEXT NOT NULL,
+            total_records   INTEGER DEFAULT 0,
+            high_value      INTEGER DEFAULT 0,
+            reformattable   INTEGER DEFAULT 0,
+            avg_quality     REAL DEFAULT 0.0,
+            summary         TEXT DEFAULT '',
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS proxies (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             address     TEXT NOT NULL UNIQUE,

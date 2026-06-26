@@ -11,6 +11,7 @@ const routes = [
   { path: '/exports', name: 'ExportSettings', component: () => import('../views/ExportSettings.vue') },
   { path: '/dead-letter', name: 'DeadLetter', component: () => import('../views/DeadLetterQueue.vue') },
   { path: '/proxies', name: 'Proxies', component: () => import('../views/ProxySettings.vue') },
+  { path: '/analysis', name: 'Analysis', component: () => import('../views/AnalysisResults.vue') },
 ]
 
 export default createRouter({

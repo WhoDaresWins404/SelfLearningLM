@@ -19,6 +19,9 @@
         <router-link to="/datasets" class="nav-item" active-class="active">
           <i class="pi pi-folder"></i> Datasets
         </router-link>
+        <router-link to="/analysis" class="nav-item" active-class="active">
+          <i class="pi pi-chart-bar"></i> Analysis
+        </router-link>
 
         <span class="nav-group-label">Ingestion</span>
         <router-link to="/sources" class="nav-item" active-class="active">
