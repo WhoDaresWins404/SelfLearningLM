@@ -4,6 +4,8 @@ import json
 import trafilatura
 from bs4 import BeautifulSoup
 
+from backend.processor.cleanup import clean_content, clean_sections
+
 # Minimum lines/characters for a code block to be considered "real" code
 _MIN_CODE_LINES = 3
 _MIN_CODE_CHARS = 40
@@ -246,6 +248,8 @@ def extract_content(html: str) -> dict:
         sections = _extract_sections_from_html(html)
 
     clean_text = _fix_inline_code_spacing(clean_text)
+    clean_text = clean_content(clean_text)
+    sections = clean_sections(sections)
 
     is_dump = _is_raw_dump(clean_text) if clean_text else False
 

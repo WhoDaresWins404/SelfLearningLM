@@ -44,5 +44,15 @@ def reextract(domain: str = ""):
     typer.echo(f"Done. Re-extracted {count} records.")
 
 
+@app.command("cleanup-jsonl")
+def cleanup_jsonl(input: str = typer.Argument(..., help="Path to input JSONL file"),
+                  output: str = typer.Argument(..., help="Path to output JSONL file")):
+    """Clean glued words and code bracket spacing in an exported JSONL file."""
+    from backend.processor.cleanup import clean_jsonl_file
+    typer.echo(f"Cleaning {input} -> {output}...")
+    count = clean_jsonl_file(input, output)
+    typer.echo(f"Done. Cleaned {count} records.")
+
+
 if __name__ == "__main__":
     app()
