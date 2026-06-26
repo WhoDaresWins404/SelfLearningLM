@@ -12,7 +12,16 @@
       <Column field="source_url" header="Source URL"></Column>
       <Column field="quality_score" header="Score" sortable></Column>
       <Column field="created_at" header="Created" sortable></Column>
+      <Column header="">
+        <template #body="{ data }">
+          <Button icon="pi pi-eye" severity="secondary" text rounded @click="viewRecord(data)" />
+        </template>
+      </Column>
     </DataTable>
+
+    <Dialog v-model:visible="viewerVisible" :header="viewerTitle" modal :style="{ width: '90vw', height: '90vh' }" :closable="true" :dismissableMask="true">
+      <iframe v-if="viewerUrl" :src="viewerUrl" class="viewer-iframe" title="Scraped page content" />
+    </Dialog>
   </div>
 </template>
 
@@ -25,11 +34,15 @@ import Column from 'primevue/column'
 import Select from 'primevue/select'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
 
 const containersStore = useContainersStore()
 const records = ref([])
 const loading = ref(false)
 const filter = ref({ container_id: null, q: '' })
+const viewerVisible = ref(false)
+const viewerUrl = ref('')
+const viewerTitle = ref('')
 
 const containerOptions = computed(() => [
   { label: 'All Containers', value: null },
@@ -57,6 +70,12 @@ async function search() {
     loading.value = false
   }
 }
+
+function viewRecord(record) {
+  viewerTitle.value = record.source_url
+  viewerUrl.value = `/api/records/${record.id}/content`
+  viewerVisible.value = true
+}
 </script>
 
 <style scoped>
@@ -64,4 +83,5 @@ async function search() {
 .filters { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; }
 .filter-select { min-width: 200px; }
 .filter-search { min-width: 250px; }
+.viewer-iframe { width: 100%; height: 100%; border: none; }
 </style>

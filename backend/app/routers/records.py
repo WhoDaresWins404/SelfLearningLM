@@ -1,4 +1,7 @@
-from fastapi import APIRouter
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 
 from backend.app.database import get_main_connection
 
@@ -35,3 +38,20 @@ def search_records(q: str = "", limit: int = 50):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+@router.get("/{record_id}/content", response_class=HTMLResponse)
+def get_record_content(record_id: int):
+    conn = get_main_connection()
+    row = conn.execute(
+        "SELECT source_url, raw_blob_path FROM records WHERE id = ?", (record_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "Record not found")
+    if not row["raw_blob_path"]:
+        raise HTTPException(404, "No raw content stored for this record")
+    file_path = Path(row["raw_blob_path"])
+    if not file_path.exists():
+        raise HTTPException(404, "Raw content file not found on disk")
+    return file_path.read_text(encoding="utf-8", errors="replace")
