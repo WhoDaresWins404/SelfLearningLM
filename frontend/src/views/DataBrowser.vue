@@ -5,6 +5,7 @@
       <Select v-model="filter.container_id" :options="containerOptions" optionLabel="label" optionValue="value" placeholder="All Containers" class="filter-select" @change="search" />
       <InputText v-model="filter.q" placeholder="Search text..." class="filter-search" @keyup.enter="search" />
       <Button icon="pi pi-search" @click="search" />
+      <Button label="Process" icon="pi pi-cog" severity="info" @click="$router.push('/process')" />
     </div>
     <DataTable :value="records" stripedRows :loading="loading">
       <Column field="id" header="ID" sortable></Column>

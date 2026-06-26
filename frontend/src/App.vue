@@ -8,20 +8,25 @@
         <router-link to="/" class="nav-item" exact-active-class="active">
           <i class="pi pi-home"></i> Dashboard
         </router-link>
+        <span class="nav-group-label">Workflow</span>
+
         <router-link to="/containers" class="nav-item" active-class="active">
-          <i class="pi pi-box"></i> Containers
+          <i class="pi pi-box"></i> 1. Containers
+        </router-link>
+        <router-link to="/proxies" class="nav-item" active-class="active">
+          <i class="pi pi-shield"></i> 2. Proxies
         </router-link>
         <router-link to="/crawl" class="nav-item" active-class="active">
-          <i class="pi pi-send"></i> Crawl Control
+          <i class="pi pi-send"></i> 3. Crawl
+        </router-link>
+        <router-link to="/process" class="nav-item" active-class="active">
+          <i class="pi pi-cog"></i> 4. Process
         </router-link>
         <router-link to="/data" class="nav-item" active-class="active">
-          <i class="pi pi-database"></i> Data Browser
+          <i class="pi pi-database"></i> 5. Data Browser
         </router-link>
         <router-link to="/dead-letter" class="nav-item" active-class="active">
           <i class="pi pi-exclamation-triangle"></i> Dead Letter
-        </router-link>
-        <router-link to="/proxies" class="nav-item" active-class="active">
-          <i class="pi pi-shield"></i> Proxy Settings
         </router-link>
       </nav>
     </aside>
@@ -45,5 +50,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .nav-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 0.75rem; color: #94a3b8; text-decoration: none; border-radius: 6px; font-size: 0.9rem; transition: all 0.15s; }
 .nav-item:hover { background: #334155; color: #e2e8f0; }
 .nav-item.active { background: #3b82f6; color: #fff; }
+.nav-group-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; padding: 0.75rem 0.75rem 0.25rem; margin-top: 0.25rem; border-top: 1px solid #334155; }
 .main-content { flex: 1; padding: 2rem; overflow-y: auto; }
 </style>
