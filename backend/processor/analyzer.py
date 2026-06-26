@@ -31,7 +31,7 @@ def analyze_blob(html: str) -> list[str]:
             3 if has_pre_code else 0,
             2 if soup.find_all(["h1", "h2"]) else 0,
         ])
-        scores["Technical Documentation"] = base / 5.0
+        scores["Detailed Technical Documentation"] = base / 5.0
 
     # Forum Posts
     if has_article or has_forum_structure:

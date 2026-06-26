@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 
 
-def extract_technical_doc(html: str) -> dict:
+def extract_detailed_technical_doc(html: str) -> dict:
     soup = BeautifulSoup(html, "lxml")
     return {
         "title": (soup.h1.get_text(strip=True) if soup.h1 else ""),
