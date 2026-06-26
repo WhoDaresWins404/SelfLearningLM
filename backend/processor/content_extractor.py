@@ -65,6 +65,8 @@ def _sanitize_html(html: str) -> str:
                 break
 
     for tag in soup.find_all(True):
+        if not hasattr(tag, "attrs") or tag.attrs is None:
+            continue
         classes = " ".join(tag.get("class", []))
         if classes:
             cls_lower = classes.lower()
