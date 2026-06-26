@@ -3,6 +3,13 @@ import typer
 app = typer.Typer(name="selflearninglm", help="SelfLearningLM - Intelligent Crawler & Data Processor")
 
 
+def _ensure_db():
+    from backend.app.database import init_main_db, migrate_main_db, init_lake_db
+    init_main_db()
+    migrate_main_db()
+    init_lake_db()
+
+
 @app.command("serve")
 def serve(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
     """Start the FastAPI web application."""
@@ -21,6 +28,7 @@ def crawl(domain: str, urls: list[str] = typer.Option(..., "--url", "-u"), max_p
 @app.command("process")
 def process(domain: str = ""):
     """Run the processor pipeline on scraped data."""
+    _ensure_db()
     from backend.processor.pipeline import run_pipeline
     typer.echo(f"Processing data for {domain or 'all domains'}...")
     run_pipeline(domain=domain)
@@ -29,6 +37,7 @@ def process(domain: str = ""):
 @app.command("backfill-training")
 def backfill(domain: str = ""):
     """Generate training data for existing records that don't have it yet."""
+    _ensure_db()
     from backend.processor.pipeline import backfill_training_data
     typer.echo(f"Backfilling training data for {domain or 'all domains'}...")
     count = backfill_training_data(domain=domain)
@@ -38,6 +47,7 @@ def backfill(domain: str = ""):
 @app.command("reextract")
 def reextract(domain: str = ""):
     """Re-extract content for existing records using updated extractors and regenerate training data."""
+    _ensure_db()
     from backend.processor.pipeline import reextract_records
     typer.echo(f"Re-extracting content for {domain or 'all domains'}...")
     count = reextract_records(domain=domain)
