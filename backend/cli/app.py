@@ -31,7 +31,7 @@ def crawl(domain: str, urls: list[str] = typer.Option(..., "--url", "-u"), max_p
 @app.command("process")
 def process(domain: str = ""):
     """Run the processor pipeline on scraped data."""
-    from backend.app.processor.pipeline import run_pipeline
+    from backend.processor.pipeline import run_pipeline
     typer.echo(f"Processing data for {domain or 'all domains'}...")
     run_pipeline(domain=domain)
 
@@ -39,7 +39,7 @@ def process(domain: str = ""):
 @app.command("backfill-training")
 def backfill(domain: str = ""):
     """Generate training data for existing records that don't have it yet."""
-    from backend.app.processor.pipeline import backfill_training_data
+    from backend.processor.pipeline import backfill_training_data
     typer.echo(f"Backfilling training data for {domain or 'all domains'}...")
     count = backfill_training_data(domain=domain)
     typer.echo(f"Done. Processed {count} records.")
