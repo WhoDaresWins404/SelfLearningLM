@@ -66,6 +66,15 @@ def init_main_db():
             created_at  TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS training_data (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_id       INTEGER NOT NULL,
+            format          TEXT NOT NULL,
+            content         TEXT NOT NULL,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (record_id) REFERENCES records(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS dead_letter (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             url             TEXT NOT NULL,

@@ -17,6 +17,7 @@ class ContainerSchema(BaseModel):
     name: str
     description: str = ""
     fields: list[FieldDefinition] = []
+    training_format: str = "plain_text"
 
 
 class ContainerCreate(BaseModel):

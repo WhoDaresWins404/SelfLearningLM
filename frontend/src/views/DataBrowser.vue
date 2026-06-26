@@ -6,6 +6,7 @@
       <InputText v-model="filter.q" placeholder="Search text..." class="filter-search" @keyup.enter="search" />
       <Button icon="pi pi-search" @click="search" />
       <Button label="Process" icon="pi pi-cog" severity="info" @click="$router.push('/process')" />
+      <Button label="Export" icon="pi pi-download" severity="success" @click="exportTraining" />
     </div>
     <DataTable :value="records" stripedRows :loading="loading">
       <Column field="id" header="ID" sortable></Column>
@@ -70,6 +71,12 @@ async function search() {
   } finally {
     loading.value = false
   }
+}
+
+function exportTraining() {
+  const params = new URLSearchParams()
+  if (filter.value.container_id) params.set('container_id', filter.value.container_id)
+  window.open(`/api/training/export?${params.toString()}`, '_blank')
 }
 
 function viewRecord(record) {

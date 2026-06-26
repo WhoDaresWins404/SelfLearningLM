@@ -11,6 +11,13 @@
         <Textarea v-model="form.description" rows="2" placeholder="Optional description" />
       </div>
 
+      <h3>Training Format</h3>
+      <div class="form-field">
+        <label>Output training data format</label>
+        <Select v-model="form.training_format" :options="trainingFormats" class="training-fmt-select" />
+        <p class="hint">How scraped content is formatted for LM/LLM training.</p>
+      </div>
+
       <h3>Fields</h3>
       <p class="hint">Define the fields to extract. Drag to reorder.</p>
 
@@ -58,8 +65,15 @@ const store = useContainersStore()
 const isNew = computed(() => !route.params.id)
 const saving = ref(false)
 const fieldTypes = ['string', 'number', 'boolean', 'array', 'object']
+const trainingFormats = [
+  { label: 'Plain Text', value: 'plain_text' },
+  { label: 'Instruction-Response', value: 'instruction_response' },
+  { label: 'Code + Explanation', value: 'code_explanation' },
+  { label: 'Q&A Pairs', value: 'qa' },
+  { label: 'All Formats', value: 'all' },
+]
 
-const form = ref({ name: '', description: '', fields: [] })
+const form = ref({ name: '', description: '', fields: [], training_format: 'plain_text' })
 
 onMounted(async () => {
   if (!isNew.value) {
@@ -67,6 +81,7 @@ onMounted(async () => {
     form.value.name = c.name
     form.value.description = c.description
     form.value.fields = c.schema_def?.fields || []
+    form.value.training_format = c.schema_def?.training_format || 'plain_text'
   }
 })
 
@@ -78,7 +93,8 @@ const schemaObj = computed(() => ({
     selector: f.selector || '',
     selector_type: f.selector_type || 'css',
     required: !!f.required,
-  }))
+  })),
+  training_format: form.value.training_format,
 }))
 
 function addField() {
@@ -120,6 +136,7 @@ async function save() {
 .field-drag { padding-top: 0.5rem; cursor: grab; color: #94a3b8; }
 .field-inputs { display: flex; flex-wrap: wrap; gap: 0.5rem; flex: 1; align-items: center; }
 .field-name { width: 140px; }
+.training-fmt-select { width: 280px; }
 .field-type { width: 110px; }
 .field-selector { width: 160px; }
 .field-sel-type { width: 90px; }
