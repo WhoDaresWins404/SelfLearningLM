@@ -13,17 +13,7 @@ from backend.processor.storage_writer import write_record
 from backend.processor.training_formatter import FORMATTERS
 
 
-def _store_training(record_id: int, content: dict, container_id: int):
-    conn = get_main_connection()
-    row = conn.execute("SELECT schema_def FROM containers WHERE id = ?", (container_id,)).fetchone()
-    if not row:
-        conn.close()
-        return
-    schema = json.loads(row["schema_def"])
-    fmt = schema.get("training_format", "plain_text")
-    conn.close()
-
-    conn = get_main_connection()
+def _store_training(conn, record_id: int, content: dict, fmt: str):
     if fmt == "all":
         for name in FORMATTERS:
             formatted = FORMATTERS[name](content)
@@ -38,16 +28,18 @@ def _store_training(record_id: int, content: dict, container_id: int):
             "INSERT INTO training_data (record_id, format, content) VALUES (?, ?, ?)",
             (record_id, fmt, formatted),
         )
-    conn.commit()
-    conn.close()
 
 
 def run_pipeline(domain: str = ""):
     lake = get_lake_connection()
     main = get_main_connection()
 
-    containers = {row["name"]: row["id"] for row in main.execute("SELECT id, name FROM containers").fetchall()}
-    container_schemas = {row["name"]: json.loads(row["schema_def"]) for row in main.execute("SELECT name, schema_def FROM containers").fetchall()}
+    containers = {}
+    container_formats = {}
+    for row in main.execute("SELECT id, name, schema_def FROM containers").fetchall():
+        containers[row["name"]] = row["id"]
+        schema = json.loads(row["schema_def"])
+        container_formats[row["id"]] = schema.get("training_format", "plain_text")
 
     query = "SELECT * FROM blobs"
     params = []
@@ -95,6 +87,6 @@ def run_pipeline(domain: str = ""):
                 quality_score=quality,
             )
 
-            _store_training(record_id, content, container_id)
+            _store_training(main, record_id, content, container_formats.get(container_id, "plain_text"))
 
     main.close()
