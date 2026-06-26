@@ -65,7 +65,9 @@ def _score(content: dict) -> float:
         score += 10
     if content.get("title"):
         score += 10
-    return min(100.0, round(score, 1))
+    if content.get("is_raw_dump"):
+        score -= 40
+    return max(0.0, min(100.0, round(score, 1)))
 
 
 def _store_training(conn, record_id: int, content: dict, fmt: str):
